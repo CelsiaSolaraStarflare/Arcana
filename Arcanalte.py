@@ -1,7 +1,7 @@
 import streamlit as st
 import openai  # Ensure you have this package installed
 from finder import *
-from cahtbot import *
+from cahtbot import * 
 from settings import *
 
 # Function for the intro page
