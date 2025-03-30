@@ -6,7 +6,7 @@ from settings import *
 
 # Function for the intro page
 def intro_page():
-    with open('introduction.txt', mode='r') as file:
+    with open('README.md', mode='r') as file:
         content = file.read()
         st.markdown(content)  # Render the content as Markdown
 
