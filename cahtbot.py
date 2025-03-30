@@ -2,7 +2,7 @@ import streamlit as st
 import openai
 from response import openai_api_call  # Assuming this function handles the OpenAI API call
 
-# Function for the chatbot page 
+# Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
 
@@ -16,14 +16,13 @@ def chatbot_page():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
+    # Input box for user messages
+    user_input = st.chat_input("Type your message...")
     # Dropdown to select the response type
     response_type = st.selectbox(
         "Choose a response type:",
         ["Default", "From IDX", "Reasoning", "Creative"]
     )
-
-    # Input box for user messages
-    user_input = st.chat_input("Type your message...")
     if user_input:
         # Add user message to session state
         st.session_state.messages.append({"role": "user", "content": user_input})
@@ -52,14 +51,3 @@ def chatbot_page():
             st.session_state.messages.append({"role": "assistant", "content": "An error occurred."})
             with st.chat_message("assistant"):
                 st.markdown(f"An error occurred: {e}")
-
-# Main Streamlit app
-st.sidebar.title("Navigation")
-selection = st.sidebar.radio("Go to", ["ChatApp", "Settings"])
-
-if selection == "ChatApp":
-    chatbot_page()
-elif selection == "Settings":
-    st.title("Settings")
-    theme = st.selectbox("Choose a theme:", ["Light", "Dark"])
-    st.write(f"Selected theme: {theme}")
