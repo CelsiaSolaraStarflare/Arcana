@@ -1,6 +1,6 @@
 import streamlit as st
 import openai
-from response import openai_api_call  # Assuming this function handles the OpenAI API call 
+from response import openai_api_call  # Assuming this function handles the OpenAI API call
 
 # Function for the chatbot page
 def chatbot_page():
@@ -32,9 +32,9 @@ def chatbot_page():
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
         if response_type == "From IDX":
-            system_prompt = "You are an expert who provides information specifically from IDX."
+            system_prompt = "You are an expert who provides information specifically from Indexademics Database. Now you will always query the Finder or Database for files that can explain the content to the user. You may want to find exact defintiions and or quotes to support and to back up your answer."
         elif response_type == "Reasoning":
-            system_prompt = "You are a logical assistant who focuses on providing detailed reasoning."
+            system_prompt = "You are a logical assistant who focuses on providing detailed reasoning. From here you will be triggered with a deep thinking phrase and then you should cover and then think about all aspects provided in the <think> phrase. "
         elif response_type == "Creative":
             system_prompt = "You are a creative assistant who crafts imaginative and inspiring responses."
         
