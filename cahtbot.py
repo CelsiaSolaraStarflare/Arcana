@@ -2,7 +2,7 @@ import streamlit as st
 import openai
 from response import openai_api_call  # Assuming this function handles the OpenAI API call
 
-# Function for the chatbot page
+# Function for the chatbot page 
 def chatbot_page():
     st.title("ChatApp Interface")
 
