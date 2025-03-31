@@ -5,7 +5,7 @@ from pptx import Presentation
 import chardet
 from fiber import *
 
-def indexing():
+def indexing(LOCAL_CACHE_DIR):
     # Initialize the FiberDBMS instance
     dbms = FiberDBMS()
     temp_db_file = "temp_database.txt"
