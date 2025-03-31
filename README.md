@@ -12,4 +12,5 @@ Welcome to Arcana, your dynamic study resource database! Our goal is to help stu
 ## Works Cited
 Below is a sample citation in BibTeX format:
 ```
+Arcana Chatbot, Indexademics. March 31st, 2025. Powered by StandardCAS™. 
 ```
