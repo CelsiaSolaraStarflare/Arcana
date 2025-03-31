@@ -1,2 +1,6 @@
 openai
 numpy
+pandas
+python-docx
+python-pptx
+chardet
