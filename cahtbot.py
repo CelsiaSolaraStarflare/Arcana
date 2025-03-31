@@ -9,6 +9,12 @@ from nltk.corpus import stopwords
 nltk.download("punkt")
 nltk.download("stopwords")
 nltk.download('punkt_tab')
+
+from fiber import *  # Import your FiberDBMS class/module
+
+dbms = FiberDBMS()
+dbms.load_or_create("temp_database.txt")  # Ensure database is loaded
+
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
