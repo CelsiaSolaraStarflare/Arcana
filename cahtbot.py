@@ -28,7 +28,41 @@ def chatbot_page():
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
+        
+        # Extract keywords from user input
+        from nltk.tokenize import word_tokenize
+        from nltk.corpus import stopwords
+        import nltk
+    
+        nltk.download('stopwords')
+        nltk.download('punkt')
+        
+        # Tokenize and filter out stop words to get keywords
+        stop_words = set(stopwords.words('english'))
+        words = word_tokenize(user_input)
+        keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
+        
+        # Query the database using the extracted keywords
+        results = dbms.query(" ".join(keywords), top_n=5)  # Combine keywords for a relevant search query
+        
+        # Create assistant reply based on database search results
+        assistant_reply = ""
+        if results:
+            assistant_reply += "Here are the top results I found:\n"
+            for idx, result in enumerate(results, 1):
+                assistant_reply += f"**Result {idx}**\n"
+                assistant_reply += f"Name: {result['name']}\n"
+                assistant_reply += f"Content: {result['content']}\n"
+                assistant_reply += f"Tags: {result['tags']}\n\n"
+        else:
+            assistant_reply = "Sorry, I couldn't find anything relevant in the database."
+    
+        # Add assistant message to session state
+        st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+        with st.chat_message("assistant"):
+            st.markdown(assistant_reply)
 
+        ###
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
         if response_type == "From IDX":
