@@ -8,7 +8,7 @@ from nltk.corpus import stopwords
 # Download required NLTK data
 nltk.download("punkt")
 nltk.download("stopwords")
-
+nltk.download('punkt_tab')
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
