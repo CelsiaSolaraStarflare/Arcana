@@ -4,6 +4,14 @@ from docx import Document
 from pptx import Presentation
 import chardet
 from fiber import *
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+
+# Download required NLTK data
+nltk.download("punkt")
+nltk.download("stopwords")
+nltk.download('punkt_tab')
 
 def indexing(LOCAL_CACHE_DIR):
     # Initialize the FiberDBMS instance
@@ -42,8 +50,13 @@ def indexing(LOCAL_CACHE_DIR):
                     content = None  # Ignore unsupported formats
 
                 # Add the file content to the database
-                if content:
-                    dbms.add_entry(name=file, content=content, tags="")
+                for i in content.split('\n'):
+                    if i:
+                        stop_words = set(stopwords.words('english'))
+                        words = word_tokenize(i)
+                        keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
+
+                        dbms.add_entry(name=file, content=i, tags=keywords)
 
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
