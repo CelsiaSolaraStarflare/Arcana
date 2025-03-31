@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+from indexing import *
 
 # Base directory for file storage
 LOCAL_CACHE_DIR = "local_cache"
@@ -110,7 +111,13 @@ def files_page():
         st.success(f"{len(stored_files)} files uploaded and stored successfully!")
         st.rerun()  # Automatically refresh after uploading
 
+    # Display cached files in the Finder
     display_cached_files()
+
+    # Add the "Index All to Database" button
+    if st.button("Index All to Database"):
+        indexing()  # Call the blank indexing function
+
 
 if __name__ == "__main__":
     files_page()
