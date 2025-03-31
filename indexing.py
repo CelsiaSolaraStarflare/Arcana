@@ -3,7 +3,7 @@ import pandas as pd
 from docx import Document
 from pptx import Presentation
 import chardet
-from Fiber import *
+from fiber import *
 
 def indexing():
     # Initialize the FiberDBMS instance
