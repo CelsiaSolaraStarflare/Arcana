@@ -12,9 +12,6 @@ nltk.download('punkt_tab')
 
 from fiber import *  # Import your FiberDBMS class/module
 
-dbms = FiberDBMS()
-dbms.load_or_create("temp_database.txt")  # Ensure database is loaded
-
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
@@ -48,7 +45,10 @@ def chatbot_page():
         stop_words = set(stopwords.words('english'))
         words = word_tokenize(user_input)
         keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
-        
+
+        dbms = FiberDBMS()
+        dbms.load_or_create("temp_database.txt") 
+
         # Query the database using the extracted keywords
         results = dbms.query(" ".join(keywords), top_n=5)  # Combine keywords for a relevant search query
         
