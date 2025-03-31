@@ -1,6 +1,13 @@
 import streamlit as st
 import openai 
 from response import openai_api_call  # Assuming this function handles the OpenAI API call
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+
+# Download required NLTK data
+nltk.download("punkt")
+nltk.download("stopwords")
 
 # Function for the chatbot page
 def chatbot_page():
@@ -29,13 +36,7 @@ def chatbot_page():
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        # Extract keywords from user input
-        from nltk.tokenize import word_tokenize
-        from nltk.corpus import stopwords
-        import nltk
-    
-        nltk.download('stopwords')
-        nltk.download('punkt')
+        
         
         # Tokenize and filter out stop words to get keywords
         stop_words = set(stopwords.words('english'))
