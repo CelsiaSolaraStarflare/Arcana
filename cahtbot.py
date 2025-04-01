@@ -56,7 +56,7 @@ def chatbot_page():
         # Create assistant reply based on database search results
         assistant_reply = ""
         if results:
-            assistant_reply += "Here are the top results I found:\n"
+            assistant_reply += "Here are the top results I found in the Indexademics Database Search:\n"
             for idx, result in enumerate(results, 1):
                 assistant_reply += f"**Result {idx}**\n"
                 assistant_reply += f"Name: {result['name']}\n"
@@ -66,7 +66,7 @@ def chatbot_page():
             assistant_reply = "Sorry, I couldn't find anything relevant in the database."
     
         # Add assistant message to session state
-        st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+        st.session_state.messages.append({"role": "system", "content": 'Here are sources that you may use, if you do, please cite and quote at all times'+assistant_reply})
         with st.chat_message("assistant"):
             st.markdown(assistant_reply)
 
