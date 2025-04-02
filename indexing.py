@@ -58,6 +58,7 @@ def indexing(LOCAL_CACHE_DIR):
 
                         dbms.add_entry(name=file, content=i, tags=keywords)
                         print(i, keywords)
+                print('The database has been indexed')
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
 
