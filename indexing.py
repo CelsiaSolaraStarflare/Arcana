@@ -57,7 +57,7 @@ def indexing(LOCAL_CACHE_DIR):
                         keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
 
                         dbms.add_entry(name=file, content=i, tags=keywords)
-
+                        print(i, keywords)
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
 
