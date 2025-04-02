@@ -2,8 +2,8 @@
 from openai import OpenAI
 
 client = OpenAI(
-    base_url='https://api.openai-proxy.org/v1',
-    api_key='sk-h5dnvEJsWlA4YY868M7LC0hGGtD6mmubhSeg7zQ2dFDMehbw',
+    base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
+    api_key='sk-e8dfa404853d43e9870570c6c98c9516',
 )
 
 online = True
@@ -12,7 +12,7 @@ def openai_api_call(messages):
     print(messages)
     chat_completion = client.chat.completions.create(
         messages=messages,
-        model="gpt-3.5-turbo",
+        model="qwen-turbo",
     )
     print(chat_completion)
     return chat_completion.choices[0].message.content
