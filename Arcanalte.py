@@ -7,7 +7,7 @@ from settings import *
 import uuid
 
 def get_mac_address():
-    return ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
+    print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
 
 # Intro page function
 def intro_page():
