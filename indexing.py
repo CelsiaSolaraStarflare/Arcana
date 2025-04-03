@@ -7,6 +7,7 @@ from fiber import *
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+from PyPDF2 import PdfReader  # New import for handling PDFs
 
 # Download required NLTK data
 nltk.download("punkt")
@@ -46,18 +47,22 @@ def indexing(LOCAL_CACHE_DIR):
                 elif file_extension in [".xls", ".xlsx", ".csv"]:
                     df = pd.read_excel(file_path) if "xls" in file_extension else pd.read_csv(file_path)
                     content = df.to_csv(index=False)
+                elif file_extension == ".pdf":  # New condition for handling PDFs
+                    reader = PdfReader(file_path)
+                    content = "\n".join([page.extract_text() for page in reader.pages])
                 else:
                     content = None  # Ignore unsupported formats
 
                 # Add the file content to the database
-                for i in content.split('\n'):
-                    if i:
-                        stop_words = set(stopwords.words('english'))
-                        words = word_tokenize(i)
-                        keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
+                if content:  # Ensure content is not None
+                    for i in content.split('\n'):
+                        if i:
+                            stop_words = set(stopwords.words('english'))
+                            words = word_tokenize(i)
+                            keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
 
-                        dbms.add_entry(name=file, content=i, tags=keywords)
-                        print(i, keywords)
+                            dbms.add_entry(name=file, content=i, tags=keywords)
+                            print(i, keywords)
                 print('The database has been indexed')
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
