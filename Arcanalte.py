@@ -24,3 +24,8 @@ pages = {
 # Main app logic
 st.sidebar.title("Navigation")
 
+selection = st.sidebar.radio("Go to", list(pages.keys()))
+ 
+# Display the selected page
+pages[selection]()
+
