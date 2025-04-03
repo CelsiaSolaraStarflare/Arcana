@@ -9,6 +9,7 @@ Now if this is your first time here in Arcana, you might want to get familiar wi
 -IDXDB or "Database" on the other hand means the temporary cache you have for your current login to this webpage.
         
 **Interface**
+```
 -You can go to Chatbot page by manuerving through the menu.
   -Selecting Default means that the content you ask will be answered through our Arcanalte bot.
   -Selecting IDX will make the bot answer from the database consisting of IDX's contents and your contents.
@@ -22,7 +23,7 @@ Now if this is your first time here in Arcana, you might want to get familiar wi
   -At the end of each round of change or upload, go to the bottom of the page and click "Index to Database". 
     -This is a slower process, you will see a "Running..." Icon on the upper right of the screen, when it dissapears, you are ready to go!
     -Now go back to the Chatbot page and select IDX mode, the chatbot will now answer by quoting and mentioning the lins from IDX and your database!
-    
+```
 ## Works Cited
 Below is the algorithms and architectures and or this project for you to cite:
 ```
