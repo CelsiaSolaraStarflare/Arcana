@@ -4,6 +4,8 @@ from finder import *
 from chatbot import * 
 from settings import *
 
+import uuid
+print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
 
 
 
