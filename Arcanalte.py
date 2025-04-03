@@ -22,7 +22,8 @@ def intro_page():
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
-    "Chatbot": chatbot_page
+    "Chatbot": chatbot_page,
+    "Get MAC Address": get_mac_address()
 }
 
 # Main app logic
