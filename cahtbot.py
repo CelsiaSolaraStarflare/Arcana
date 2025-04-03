@@ -31,7 +31,7 @@ def chatbot_page():
     # Dropdown to select the response type
     response_type = st.selectbox(
         "Choose a response type:",
-        ["Default", "From IDX", "Reasoning", "Creative"]
+        ["Normal", "IDX", "Reasoning", "Long Text"]
     )
     if user_input:
         # Add user message to session state
@@ -73,19 +73,19 @@ def chatbot_page():
         ###
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
-        if response_type == "From IDX":
+        if response_type == "IDX":
             system_prompt = "You are an expert who provides information specifically from Indexademics Database. Now you will always query the Finder or Database for files that can explain the content to the user. You may want to find exact defintiions and or quotes to support and to back up your answer."
         elif response_type == "Reasoning":
             system_prompt = "You are a logical assistant who focuses on providing detailed reasoning. From here you will be triggered with a deep thinking phrase and then you should cover and then think about all aspects provided in the <think> phrase. "
-        elif response_type == "Creative":
-            system_prompt = "You are a creative assistant who crafts imaginative and inspiring responses."
+        elif response_type == "Long Text":
+            system_prompt = "You are an assistant who can solve very long questions or generate text contents."
         
         # Update the system message in session state
         st.session_state.messages[0]["content"] = system_prompt
 
         # Fetch response from OpenAI's API
         try:
-            bot_response = openai_api_call(st.session_state.messages)  # Pass the conversation history
+            bot_response = openai_api_call(st.session_state.messages,response_type)  # Pass the conversation history
             st.session_state.messages.append({"role": "assistant", "content": bot_response})
             with st.chat_message("assistant"):
                 st.markdown(bot_response)
