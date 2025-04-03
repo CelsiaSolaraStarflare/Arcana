@@ -29,7 +29,7 @@ def sign_up():
             st.success("Sign-up successful! Please log in.")
 
 # Login function
-def login(user, passwords):
+def login(user=None, passwords=None):
     st.title("Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
