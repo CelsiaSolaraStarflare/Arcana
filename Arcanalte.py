@@ -14,8 +14,8 @@ def intro_page():
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
-    "Chatbot": chatbot_page,
-    "Settings": settings_page
+    "Chatbot": chatbot_page
+    #"Settings": settings_page
 }
 
 # Sidebar for navigation
