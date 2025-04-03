@@ -1,3 +1,16 @@
+import streamlit as st
+import openai 
+from response import openai_api_call  # Assuming this function handles the OpenAI API call
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+ 
+# Download required NLTK data
+nltk.download("punkt")
+nltk.download("stopwords")
+nltk.download('punkt_tab')
+ 
+from fiber import *  # Import your FiberDBMS class/module
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
