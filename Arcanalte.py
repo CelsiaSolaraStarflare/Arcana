@@ -9,7 +9,7 @@ from settings import *
 users_db = {
     "admin": "password123"
 }
-
+current_in = []
 # Sign-up function
 def sign_up():
     st.title("Sign-Up")
@@ -41,8 +41,8 @@ def login(user=None, passwords=None):
         if username in users_db and users_db[username] == password:
             st.success(f"Welcome back, {username}!")
             with open('tmpdb.censored', mode='w') as file:
-                file.write(str(hash(str(username)+str(password))))
-            
+                file.write(str(hash(str(username))))
+                current_in.append(username)
             return True
         else:
             st.error("Invalid username or password.")
@@ -63,12 +63,20 @@ pages = {
 
 # Main app logic
 st.sidebar.title("Navigation")
-auth = st.sidebar.radio("Authentication", ["Sign Up", "Login", "App"])
-if auth == "Sign Up":
-    sign_up()
-elif auth == "Login":
-    if login():
-        selection = st.sidebar.radio("Go to", list(pages.keys()))
-        pages[selection]()
-else:
-    st.info("Please log in or sign up to access the application.")
+with open('tmpdb.censored', mode='r') as file:
+    const = file.read()
+flag = False
+for i in currently_in:
+    if hash(i) == const:
+        flag = True
+
+if flag != True:
+    auth = st.sidebar.radio("Authentication", ["Sign Up", "Login", "App"])
+    if auth == "Sign Up":
+        sign_up()
+    elif auth == "Login":
+        if login():
+            selection = st.sidebar.radio("Go to", list(pages.keys()))
+            pages[selection]()
+    else:
+        st.info("Please log in or sign up to access the application.")
