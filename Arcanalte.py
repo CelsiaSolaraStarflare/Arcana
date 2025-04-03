@@ -5,18 +5,18 @@ from chatbot import *
 from settings import *
 
 import uuid
-print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
 
-
-
+def get_mac_address():
+    return ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
 
 # Intro page function
 def intro_page():
     with open('README.md', mode='r') as file:
         content = file.read()
         st.markdown(content)
-    import uuid
-    print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
+    
+    if st.button("Show MAC Address"):
+        st.write(f"MAC Address: {get_mac_address()}")
 
 # Page mapping
 pages = {
@@ -28,8 +28,14 @@ pages = {
 # Main app logic
 st.sidebar.title("Navigation")
 
-selection = st.sidebar.radio("Go to", list(pages.keys()))
- 
-# Display the selected page
-pages[selection]()
+# Button-based navigation
+selected_page = None
+for page_name in pages.keys():
+    if st.sidebar.button(page_name):
+        selected_page = page_name
 
+# Display the selected page (default to first page if none selected)
+if selected_page:
+    pages[selected_page]()
+else:
+    intro_page()
