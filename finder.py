@@ -4,7 +4,12 @@ from indexing import *
 
 # Base directory for file storage
 LOCAL_CACHE_DIR = "local_cache"
+USER_TMP_DB = ''
+with open('tmpdb.censored',mode='a') as file:
+    USER_TMP_DB = file.read()
+    
 os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
+os.makedirs(USER_TMP_DB, exist_ok=True)
 
 def store_uploaded_files(uploaded_files):
     stored_files = []
