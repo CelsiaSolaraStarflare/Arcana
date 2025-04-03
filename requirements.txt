@@ -6,3 +6,4 @@ python-pptx
 chardet
 jieba
 nltk
+PyPDF2
