@@ -7,3 +7,4 @@ chardet
 jieba
 nltk
 PyPDF2
+uuid
