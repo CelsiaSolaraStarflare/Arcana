@@ -6,7 +6,14 @@ from settings import *
 
 import uuid
 import socket
-
+if not st.experimental_user.is_logged_in:
+    if st.button("Log in"):
+        st.login()
+    st.stop()
+else:
+    if st.button("Log out"):
+        st.logout()
+    st.write(f"Welcome, {st.experimental_user['name']}!")
 def get_mac_address():
     return ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
 
@@ -35,6 +42,7 @@ pages = {
 
 # Main app logic
 st.sidebar.title("Navigation")
+
 
 # Button-based navigation
 selected_page = None
