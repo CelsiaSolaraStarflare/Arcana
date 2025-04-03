@@ -1,4 +1,4 @@
-import streamlit as st
+cimport streamlit as st
 import openai  # Ensure you have this package installed
 from finder import *
 from chatbot import * 
@@ -7,7 +7,7 @@ from settings import *
 import uuid
 
 def get_mac_address():
-    print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
+    return ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
 
 # Intro page function
 def intro_page():
