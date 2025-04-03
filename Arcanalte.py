@@ -66,7 +66,7 @@ st.sidebar.title("Navigation")
 with open('tmpdb.censored', mode='r') as file:
     const = file.read()
 flag = False
-for i in currently_in:
+for i in current_in:
     if hash(i) == const:
         flag = True
 
