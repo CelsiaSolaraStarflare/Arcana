@@ -43,7 +43,7 @@ def chatbot_page():
         # Load or create the database
         dbms.load_or_create("temp_database.txt")
         # Query the database using the extracted keywords
-        results = dbms.query(" ".join(keywords), top_n=5)  # Combine keywords for a relevant search query
+        results = dbms.query(" ".join(keywords), top_n=20)  # Combine keywords for a relevant search query
         
         # Create assistant reply based on database search results
         assistant_reply = ""
