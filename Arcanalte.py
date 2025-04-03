@@ -4,6 +4,7 @@ from finder import *
 from chatbot import * 
 from settings import *
 
+
 # Mock database for simplicity
 users_db = {
     "admin": "password123"
@@ -39,6 +40,9 @@ def login(user, passwords):
     if st.button("Login"):
         if username in users_db and users_db[username] == password:
             st.success(f"Welcome back, {username}!")
+            with open('tmpdb.censored', mode='w') as file:
+                file.write(str(hash(str(username)+str(password))))
+            
             return True
         else:
             st.error("Invalid username or password.")
