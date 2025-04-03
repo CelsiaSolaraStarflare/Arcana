@@ -3,7 +3,7 @@ import streamlit as st
 from indexing import *
  
  # Base directory for file storage
-LOCAL_CACHE_DIR = "local_cache"
+LOCAL_CACHE_DIR = "IDXDB"
 os.makedirs(LOCAL_CACHE_DIR, exist_ok=True)
  
 def store_uploaded_files(uploaded_files):
