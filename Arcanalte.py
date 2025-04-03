@@ -1,4 +1,4 @@
-cimport streamlit as st
+import streamlit as st
 import openai  # Ensure you have this package installed
 from finder import *
 from chatbot import * 
