@@ -15,6 +15,8 @@ def intro_page():
     with open('README.md', mode='r') as file:
         content = file.read()
         st.markdown(content)
+    import uuid
+    print(':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big')))
 
 # Page mapping
 pages = {
