@@ -3,6 +3,7 @@ import openai  # Ensure you have this package installed
 from finder import *
 from chatbot import * 
 from settings import *
+from mixup import *
 
 import uuid
 import socket
@@ -31,7 +32,8 @@ def intro_page():
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
-    "Chatbot": chatbot_page
+    "Chatbot": chatbot_page,
+    "Mixup": mixup_page
 }
 
 # Ensure session state has a default value for 'selected_page'
