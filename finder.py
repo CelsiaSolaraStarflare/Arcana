@@ -115,7 +115,6 @@ def files_page():
  
     # Add the "Index All to Database" button
     if st.button("Index All to Database"):
-        indexing()  # Call the blank indexing function
         indexing(LOCAL_CACHE_DIR)  # Call the blank indexing function
  
  
