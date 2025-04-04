@@ -1,3 +1,15 @@
+![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0-blue)
+![Development Status](https://img.shields.io/badge/status-Beta-orange)
+![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
+![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
+
+---
+
+# 🌌 Welcome to Arcana  
+✨ By the Indexademics Team | Powered by StandardCAS™
+
+---
 ## 📚 Table of Contents
 1. [Welcome](#welcome-to-arcana)
 2. [Introduction](#introduction)
@@ -6,11 +18,6 @@
 5. [How to Use](#how-to-use)
 6. [Works Cited](#works-cited)
 7. [License](#license)
-
----
-
-# 🌌 Welcome to Arcana  
-✨ By the Indexademics Team | Powered by StandardCAS™
 
 ---
 
