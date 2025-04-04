@@ -134,5 +134,3 @@ def mixup_page():
             display_ppt_in_streamlit(ppt_file)  # Add download button
             display_reveal_slides(st.session_state.bot_response)  # Show inline reveal.js presentation
 
-# Run the application
-mixup_page()
