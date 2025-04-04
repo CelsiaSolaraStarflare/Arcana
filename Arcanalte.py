@@ -26,6 +26,13 @@ def intro_page():
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
 
+# Placeholder functions for files_page and chatbot_page
+def files_page():
+    st.write("This is the Files page.")
+
+def chatbot_page():
+    st.write("This is the Chatbot page.")
+
 # Page mapping
 pages = {
     "Introduction": intro_page,
@@ -33,16 +40,16 @@ pages = {
     "Chatbot": chatbot_page
 }
 
-# Main app logic
+# Ensure session state has a default value for 'selected_page'
+if "selected_page" not in st.session_state:
+    st.session_state["selected_page"] = "Introduction"
+
+# Sidebar navigation
 st.sidebar.title("Navigation")
-
-
-# Button-based navigation
-selected_page = "Introduction"
 for page_name in pages.keys():
     if st.sidebar.button(page_name):
-        selected_page = page_name
+        st.session_state["selected_page"] = page_name
 
-# Display the selected page (default to first page if none selected)
-if selected_page:
-    pages[selected_page]()
+# Display the selected page
+selected_page = st.session_state["selected_page"]
+pages[selected_page]()
