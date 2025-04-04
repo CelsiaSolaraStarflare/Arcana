@@ -125,14 +125,27 @@ class FiberDBMS:
         self.content_index.clear()
         with open(filename, 'r', encoding='utf-8') as f:
             for idx, line in enumerate(f):
-                name, timestamp, content, tags = line.strip().split('\t')
-                self.database.append({
-                    "name": name,
-                    "timestamp": timestamp,
-                    "content": content,
-                    "tags": tags
-                })
-                self._index_content(idx, content)
+                try:
+                    name, timestamp, content, tags = line.strip().split('\t')
+                    self.database.append({
+                        "name": name,
+                        "timestamp": timestamp,
+                        "content": content,
+                        "tags": tags
+                    })
+                    self._index_content(idx, content)
+                except Exception as e:
+                    name = line.strip().split('\t')[0]
+                    timestamp = line.strip().split('\t')[1]
+                    content = '\t'.join(line.strip().split('\t')[2:])
+                    self.database.append({
+                        "name": name,
+                        "timestamp": timestamp,
+                        "content": content,
+                        "tags": "NO TAGS ARE AVALIABLE"
+                    })
+                    self._index_content(idx, content)
+                    print(line+'is skipped due to not readable')
 
 def main():
     dbms = FiberDBMS()
