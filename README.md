@@ -3,6 +3,9 @@ Program Base Powered by StandardCAS™
 ## Introduction
 Welcome to Arcana, your dynamic study resource database! Our goal is to help students like you excel in your exams by providing quick and accurate answers to your study questions.
 
+## Make Your Chatbot PRIVATE TO YOU AND CUSTOMIZED!
+So basically you would want your chatbot to be hidden from the public database. We respect that and therefore, we have built this program on top fo streamlit UI. Feel free to fork this repertory and then build your own private server chatbot with this program!
+
 ## How to Use
 Now if this is your first time here in Arcana, you might want to get familiar with several terms:
 -Indexing means to convert refined data and materials(ppts, pdfs, docxs, csvs...etc) into raw data.
