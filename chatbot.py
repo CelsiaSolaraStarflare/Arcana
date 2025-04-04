@@ -18,13 +18,13 @@ def chatbot_page():
     # Initialize conversation history in session_state
     if "messages" not in st.session_state:
         # Include an initial system message to define the assistant's behavior
-        st.session_state.messages = [{"role": "system", "content": "You are a helpful assistant."}]
+        st.session_state.messages = []
 
     # Display existing conversation
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-
+    '''
     # Add a section for image upload
     with st.expander("Upload an Image for Inspection", expanded=False):
         uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png"])
@@ -33,7 +33,7 @@ def chatbot_page():
             st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
             # Example: Add custom processing logic for the uploaded image
             st.write("Image uploaded successfully. Add your analysis here.")
-
+    '''
     # Input box for user messages
     user_input = st.chat_input("Type your message...")
     # Dropdown to select the response type
