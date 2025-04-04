@@ -38,7 +38,7 @@ st.sidebar.title("Navigation")
 
 
 # Button-based navigation
-selected_page = None
+selected_page = "Introduction"
 for page_name in pages.keys():
     if st.sidebar.button(page_name):
         selected_page = page_name
@@ -46,5 +46,3 @@ for page_name in pages.keys():
 # Display the selected page (default to first page if none selected)
 if selected_page:
     pages[selected_page]()
-else:
-    intro_page()
