@@ -8,3 +8,4 @@ jieba
 nltk
 PyPDF2
 uuid
+streamlit-reveal-slides
