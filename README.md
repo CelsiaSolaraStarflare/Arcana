@@ -1,6 +1,6 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
 ![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0-blue)
-![Development Status](https://img.shields.io/badge/status-Public-orange)
+![Development Status](https://img.shields.io/badge/status-PublicBeta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
 
@@ -11,13 +11,12 @@
 
 ---
 ## 📚 Table of Contents
-1. [Welcome](#welcome-to-arcana)
-2. [Introduction](#introduction)
-3. [Versions](#available-versions)
-4. [Make It Yours – Private & Custom Chatbots](#make-it-private-and-customized)
-5. [How to Use](#how-to-use)
-6. [Works Cited](#works-cited)
-7. [License](#license)
+1. [Introduction](#Introduction)
+2. [Versions](#available-versions)
+3. [Make It Yours – Private & Custom Chatbots](#make-it-private-and-customized)
+4. [How to Use](#how-to-use)
+5. [Works Cited](#works-cited)
+6. [License](#license)
 
 ---
 
