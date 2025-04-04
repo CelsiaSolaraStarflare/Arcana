@@ -12,7 +12,7 @@
 --- 
 ## 📚 Table of Contents
 1. [Introduction](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-introduction)
-2. [Versions](README.md)
+2. [Versions](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-available-versions)
 3. [Make It Yours – Private & Custom Chatbots](README.md)
 4. [How to Use](README.md)
 5. [Works Cited](README.md)
