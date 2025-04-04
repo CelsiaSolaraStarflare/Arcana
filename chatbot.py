@@ -83,7 +83,8 @@ def chatbot_page():
             system_prompt = "You are a logical assistant who focuses on providing detailed reasoning."
         elif response_type == "Long Text":
             system_prompt = "You are an assistant who can solve very long questions or generate text contents."
-        
+        else:
+            system_prompt = "You may see that there is already the content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course if there is the proper definition provided, please cite. Or else you do not need to reference under this mode"
         # Update the system message in session state
         st.session_state.messages[0]["content"] = system_prompt
 
