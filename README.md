@@ -9,7 +9,7 @@
 # 🌌 Welcome to Arcana  
 ✨ By the Indexademics Team | Powered by StandardCAS™
 
----
+--- 
 ## 📚 Table of Contents
 1. [Introduction](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-introduction)
 2. [Versions](#available-versions)
