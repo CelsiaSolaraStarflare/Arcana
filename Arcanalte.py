@@ -26,12 +26,6 @@ def intro_page():
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
 
-# Placeholder functions for files_page and chatbot_page
-def files_page():
-    st.write("This is the Files page.")
-
-def chatbot_page():
-    st.write("This is the Chatbot page.")
 
 # Page mapping
 pages = {
