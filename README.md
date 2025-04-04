@@ -10,7 +10,7 @@ Available Versions
 ArcanaLTE 1.0 (Current) -> Full Indexademics Functions, Database Search, Chatbot, ArcanaMixup for PPT and Docs generations.
 ArcanaExtreme ß101 -> Covers all functions of ArcanaLTE 1.0, additional functions to sustain Peer Advisor Journalism, StandardCAS™ report generation and evaluation, source search, transcriptions, text-to-speech audios, image generations, visual interpretations, web source analytics, full AGI workflow for club administrations...etc.
 ArcanaDB -> Including functions for easy calling and building databases for Independent AI chatbots for all kinds of word usages. 
-
+```
 ## Make Your Chatbot PRIVATE TO YOU AND CUSTOMIZED!
 So basically you would want your chatbot to be hidden from the public database. We respect that and therefore, we have built this program on top fo streamlit UI. Feel free to fork this repertory and then build your own private server chatbot with this program!
 
