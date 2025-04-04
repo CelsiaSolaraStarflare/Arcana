@@ -16,7 +16,7 @@
 3. [Make It Yours – Private & Custom Chatbots](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-make-it-private-and-customized)
 4. [How to Use](README.md)
 5. [Works Cited](README.md)
-6. [License](README.md) 
+6. [License](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-license)
 
 ---
 
