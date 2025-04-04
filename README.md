@@ -1,7 +1,15 @@
 # Welcome to Arcana by the Indexademics Team
 Program Base Powered by StandardCAS™
 ## Introduction
-Welcome to Arcana, your dynamic study resource database! Our goal is to help students like you excel in your exams by providing quick and accurate answers to your study questions.
+Welcome to Arcana, your dynamic study resource database! Our goal is to help students like you excel in your exams by providing quick and accurate answers to your study questions. 
+
+## Version
+You are currently using the ArcanaLTE or Minor Arcana version of the Indexademics Program. This version consists of full functionalities of Indexademics Chatbot and database with extra plugins and options that you can enable for your chatbot pages. 
+```
+Available Versions
+ArcanaLTE 1.0 (Current) -> Full Indexademics Functions, Database Search, Chatbot, ArcanaMixup for PPT and Docs generations.
+ArcanaExtreme ß101 -> Covers all functions of ArcanaLTE 1.0, additional functions to sustain Peer Advisor Journalism, StandardCAS™ report generation and evaluation, source search, transcriptions, text-to-speech audios, image generations, visual interpretations, web source analytics, full AGI workflow for club administrations...etc.
+ArcanaDB -> Including functions for easy calling and building databases for Independent AI chatbots for all kinds of word usages. 
 
 ## Make Your Chatbot PRIVATE TO YOU AND CUSTOMIZED!
 So basically you would want your chatbot to be hidden from the public database. We respect that and therefore, we have built this program on top fo streamlit UI. Feel free to fork this repertory and then build your own private server chatbot with this program!
