@@ -11,33 +11,34 @@ client = OpenAI(
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"  # DashScope服务base_url
 )
 
-# 用户输入的文章内容
-article_content = st.text_area("请输入文章内容:", height=300)
-
-if st.button('获取摘要'):
-    if article_content.strip() != '':
-        messages=[
-            {'role': 'system', 'content': 'You are a helpful assistant.'},
-            {'role': 'user', 'content': '这篇文章讲了什么？'},
-            {'role': 'user', 'content': article_content}
-        ]
-        
-        try:
-            completion = client.chat.completions.create(
-                model="qwen-long",
-                messages=messages,
-                stream=True,
-                stream_options={"include_usage": True}
-            )
+    def longresponse_page():
+    # 用户输入的文章内容
+    article_content = st.text_area("请输入文章内容:", height=300)
+    
+    if st.button('获取摘要'):
+        if article_content.strip() != '':
+            messages=[
+                {'role': 'system', 'content': 'You are a helpful assistant.'},
+                {'role': 'user', 'content': '这篇文章讲了什么？'},
+                {'role': 'user', 'content': article_content}
+            ]
             
-            full_content = ""
-            for chunk in completion:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    full_content += chunk.choices[0].delta.content
-                    st.write(chunk.model_dump())  # 实时显示每个chunk的内容
-            
-            st.write("全文摘要: ", full_content)
-        except Exception as e:
-            st.error(f"发生错误: {e}")
-    else:
-        st.warning("请输入文章内容！")
+            try:
+                completion = client.chat.completions.create(
+                    model="qwen-long",
+                    messages=messages,
+                    stream=True,
+                    stream_options={"include_usage": True}
+                )
+                
+                full_content = ""
+                for chunk in completion:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        full_content += chunk.choices[0].delta.content
+                        st.write(chunk.model_dump())  # 实时显示每个chunk的内容
+                
+                st.write("全文摘要: ", full_content)
+            except Exception as e:
+                st.error(f"发生错误: {e}")
+        else:
+            st.warning("请输入文章内容！")
