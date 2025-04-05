@@ -2,16 +2,13 @@ import os
 import streamlit as st
 from openai import OpenAI
 
-# 设置页面标题
-st.title("Qwen Long 文章摘要")
-
 # 初始化客户端
 client = OpenAI(
     api_key=st.secrets["openai"]["api_key"],  # 使用环境变量中的API密钥
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"  # DashScope服务base_url
 )
 
-    def longresponse_page():
+def longresponse_page():
     # 用户输入的文章内容
     article_content = st.text_area("请输入文章内容:", height=300)
     
