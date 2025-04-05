@@ -32,7 +32,7 @@ def longresponse_page():
                 for chunk in completion:
                     if chunk.choices and chunk.choices[0].delta.content:
                         full_content += chunk.choices[0].delta.content
-                        st.write(chunk.model_dump())  # 实时显示每个chunk的内容
+                        st.write(full_content)  # 实时显示每个chunk的内容
                 
                 st.write("全文摘要: ", full_content)
             except Exception as e:
