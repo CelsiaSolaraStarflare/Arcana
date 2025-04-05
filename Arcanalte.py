@@ -34,8 +34,7 @@ pages = {
     "Introduction": intro_page,
     "Files": files_page,
     "Chatbot": chatbot_page,
-    "Mixup": mixup_page,
-    "Analysis": longresponse_page
+    "Mixup": mixup_page
 }
 
 # Ensure session state has a default value for 'selected_page'
