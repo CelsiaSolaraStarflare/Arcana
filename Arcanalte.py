@@ -4,6 +4,7 @@ from finder import *
 from chatbot import * 
 from settings import *
 from mixup import *
+from longresponse import *
 
 import uuid
 import socket
@@ -33,7 +34,8 @@ pages = {
     "Introduction": intro_page,
     "Files": files_page,
     "Chatbot": chatbot_page,
-    "Mixup": mixup_page
+    "Mixup": mixup_page,
+    "Analysis": longresponse_page
 }
 
 # Ensure session state has a default value for 'selected_page'
