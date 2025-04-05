@@ -7,7 +7,7 @@ st.title("Qwen Long 文章摘要")
 
 # 初始化客户端
 client = OpenAI(
-    api_key=os.getenv("DASHSCOPE_API_KEY"),  # 使用环境变量中的API密钥
+    api_key=st.secrets["openai"]["api_key"],  # 使用环境变量中的API密钥
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"  # DashScope服务base_url
 )
 
