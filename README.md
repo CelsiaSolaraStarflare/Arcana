@@ -6,7 +6,7 @@
 
 ---
 
-# 🌌 Welcome to Arcana  
+# 🌌 Welcome to ArcanaEXTREME
 ✨ By the Indexademics Team | Powered by StandardCAS™
 
 --- 
@@ -22,7 +22,7 @@
 
 ## 💖 Introduction
 
-Welcome to **Arcana** — your intelligent, dynamic study resource hub! Built to empower students with fast and accurate support, Arcana is designed to help you succeed in your learning journey through smart question answering, document indexing, and rich content generation.
+Welcome to **Arcana** — your intelligent, dynamic study resource hub! Built to empower students with fast and accurate support, Arcana is designed to help you succeed in your learning journey through smart question-answering, document indexing, and rich content generation.
 
 Whether you're studying for exams or building resources, Arcana is your trusty academic sidekick.
 
@@ -33,12 +33,12 @@ Whether you're studying for exams or building resources, Arcana is your trusty a
 You are currently using **ArcanaLTE (Minor Arcana)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
-ArcanaLTE 1.0 (Current)
+ArcanaLTE 1.0
 ✔ Full Indexademics chatbot functionality
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
 
-ArcanaExtreme ß101
+ArcanaExtreme ß101 (Current)
 ➕ All features of ArcanaLTE
 ➕ Peer Advisor Journalism suite
 ➕ StandardCAS™ report generator
