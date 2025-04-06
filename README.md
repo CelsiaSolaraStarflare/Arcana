@@ -8,6 +8,7 @@
 
 # 🌌 Welcome to ArcanaEXTREME
 ✨ By the Indexademics Team | Powered by StandardCAS™
+Enhancement features presented by the collaboration of United AIGC Art Alliance™ and NSTA™.
 
 --- 
 ## 📚 Table of Contents
