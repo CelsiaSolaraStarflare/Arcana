@@ -74,8 +74,8 @@ def chatbot_page():
     
         # Add assistant message to session state
         st.session_state.messages.append({"role": "system", "content": assistant_reply})
-        with st.chat_message("assistant"):
-            st.markdown(assistant_reply)
+        #with st.chat_message("assistant"):
+        #st.markdown(assistant_reply)
 
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
