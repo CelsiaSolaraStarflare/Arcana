@@ -80,13 +80,15 @@ def chatbot_page():
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
         if response_type == "IDX":
-            system_prompt = "You are an expert who provides information specifically from Indexademics Database."
+            system_prompt = "You are an expert who provides information specifically from Indexademics Database. Cite the result's file name at the end of each query. "
+        '''
         elif response_type == "Reasoning":
-            system_prompt = "You are a logical assistant who focuses on providing detailed reasoning."
+            system_prompt = "You are a logical assistant who focuses on providing detailed reasoning. Cite the result's file name at the end of each query. "
         elif response_type == "Long Text":
             system_prompt = "You are an assistant who can solve very long questions or generate text contents."
+        '''
         else:
-            system_prompt = "You may see that there is already the content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course if there is the proper definition provided, please cite. Or else you do not need to reference under this mode"
+            system_prompt = "You may see that there is already the content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course if there is the proper definition provided, please cite. Or else you do not need to reference under this mode. Cite the result's file name at the end of each query. "
         # Update the system message in session state
         st.session_state.messages[0]["content"] = system_prompt
 
