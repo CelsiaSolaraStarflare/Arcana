@@ -14,18 +14,18 @@ from fiber import *  # Import your FiberDBMS class/module
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
-
+  
     # Initialize conversation history in session_state
     if "messages" not in st.session_state:
         # Include an initial system message to define the assistant's behavior
         st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assisstant. Ask me anything about the SHSID high school curriculum! "}]
 
-    # Display existing conversation
+    # Display existing conversation (exclude system messages from being displayed)
     for message in st.session_state.messages:
-      print(message)
-      if message["role"] != 'system':
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        # Only display user and assistant messages, not system messages
+        if message["role"] != "system":
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
     '''
     # Add a section for image upload
     with st.expander("Upload an Image for Inspection", expanded=False):
