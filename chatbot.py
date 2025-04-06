@@ -22,7 +22,7 @@ def chatbot_page():
 
     # Display existing conversation
     for message in st.session_state.messages:
-     print(message)
+      print(message)
       if message["role"] != 'system':
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
