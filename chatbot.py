@@ -18,7 +18,7 @@ def chatbot_page():
     # Initialize conversation history in session_state
     if "messages" not in st.session_state:
         # Include an initial system message to define the assistant's behavior
-        st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assisstant. Ask me anything about the SHSID high school curriculum! "},{'role':'system','content':'cite the name fo the document where you received the results in the end of each response.']
+        st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assisstant. Ask me anything about the SHSID high school curriculum! "},{'role':'system','content':'cite the name fo the document where you received the results in the end of each response.'}]
 
     # Display existing conversation (exclude system messages from being displayed)
     for message in st.session_state.messages:
