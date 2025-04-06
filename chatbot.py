@@ -19,7 +19,7 @@ def chatbot_page():
     # Add button to clear all messages
     if st.button("Clear All Messages"):
         st.session_state.messages = []
-        st.experimental_rerun()  # Rerun to reset everything and clear the chat
+        st.rerun()  # Rerun to reset everything and clear the chat
 
     # Initialize conversation history in session_state if it's empty
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
