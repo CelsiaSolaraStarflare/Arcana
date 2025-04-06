@@ -89,12 +89,21 @@ New here? Don’t worry, angel! Here's a quick rundown of the key concepts and h
 
 ---
 
-## 📚 Works Cited
+## 📚 Works Cited and Credits
 
 ```
+For this Chatbot: 
 Arcana Chatbot, Indexademics. March 31st, 2025. Powered by StandardCAS™.
-FiberDB, StandardCAS™. Chengjui Fan, Juilyn Celsia. April 3, 2025.
-Qwen Architecture, Alibaba Cloud Group.
+FiberDB, StandardCAS™. Chengjui Osmond Fan, Juilyn Celsia. April 3, 2025.
+
+For the Development Team:
+Osmond G11 - Base algorithm coding, DBMS designing, API functions, and Accessories.
+Celsia G11 - UI Coding and Swap Platform conditioning.
+Brian G10 - Debugging and mirroring platform. 
+Pete G10 - Database arrangement and testing.
+
+For the Utilized Technologies:
+Qwen, Alibaba Cloud Group.
 Streamlit 1.22, Streamlit.io.
 ```
 
