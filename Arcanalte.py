@@ -4,6 +4,7 @@ from finder import *
 from chatbot import * 
 from settings import *
 from mixup import *
+from longresponse import *
 
 import uuid
 import socket

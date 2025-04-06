@@ -22,10 +22,18 @@ def openai_api_call(messages, mode='Normal'):
             stream=True
         )
     elif mode == 'Long Text':
-        chat_completion = client.chat.completions.create(
+        completion = client.chat.completions.create(
+            model="qwen-long",
             messages=messages,
-            model="qwen-turbo"
+            stream=True,
+            stream_options={"include_usage": True}
         )
+                
+        full_content = ""
+        for chunk in completion:
+             if chunk.choices and chunk.choices[0].delta.content:
+                 full_content += chunk.choices[0].delta.content
+                
     else:
         chat_completion = client.chat.completions.create(
             messages=messages,
@@ -33,4 +41,6 @@ def openai_api_call(messages, mode='Normal'):
         )
     print(chat_completion)
     if chat_completion:
+        if mode == 'Long Text':
+            return full_content
         return chat_completion.choices[0].message.content

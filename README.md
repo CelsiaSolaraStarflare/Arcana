@@ -1,52 +1,122 @@
-# Welcome to Arcana by the Indexademics Team
-Program Base Powered by StandardCAS™
-## Introduction
-Welcome to Arcana, your dynamic study resource database! Our goal is to help students like you excel in your exams by providing quick and accurate answers to your study questions.
+![MIT License](https://img.shields.io/badge/license-MIT-green.svg)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0-blue)
+![Development Status](https://img.shields.io/badge/status-PublicBeta-orange)
+![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
+![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
 
-## Make Your Chatbot PRIVATE TO YOU AND CUSTOMIZED!
-So basically you would want your chatbot to be hidden from the public database. We respect that and therefore, we have built this program on top fo streamlit UI. Feel free to fork this repertory and then build your own private server chatbot with this program!
+---
 
-## How to Use
-Now if this is your first time here in Arcana, you might want to get familiar with several terms:
--Indexing means to convert refined data and materials(ppts, pdfs, docxs, csvs...etc) into raw data.
--IDXDB or "Database" on the other hand means the temporary cache you have for your current login to this webpage.
-        
-**Interface**
+# 🌌 Welcome to Arcana  
+✨ By the Indexademics Team | Powered by StandardCAS™
+
+--- 
+## 📚 Table of Contents
+1. [Introduction](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-introduction)
+2. [Versions](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-available-versions)
+3. [Make It Yours – Private & Custom Chatbots](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-make-it-private-and-customized)
+4. [How to Use](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-how-to-use)
+5. [Works Cited](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-works-cited)
+6. [License](https://github.com/CelsiaSolaraStarflare/Arcana/blob/ArcanaLTE/README.md#-license)
+
+---
+
+## 💖 Introduction
+
+Welcome to **Arcana** — your intelligent, dynamic study resource hub! Built to empower students with fast and accurate support, Arcana is designed to help you succeed in your learning journey through smart question answering, document indexing, and rich content generation.
+
+Whether you're studying for exams or building resources, Arcana is your trusty academic sidekick.
+
+---
+
+## 🔮 Available Versions
+
+You are currently using **ArcanaLTE (Minor Arcana)**, the lightweight yet powerful version of the Indexademics platform.
+
 ```
--You can go to the Chatbot page by maneuvering through the menu.
-  -Selecting Default means that the content you ask will be answered through our Arcanalte bot.
-  -Selecting IDX will make the bot answer from the database consisting of IDX's contents and your contents.
-  -Reasoning will enable the deep thinking methodology of the Arcanalte by using the Qwen-QWQ architecture.
-  -Long Text will utilize both the IDX DB search algorithm and the Qwen-Long Text model for refined answering in a long sequence.
--How to upload your files or content?
-  -Go to the Files page and then there is an upload option.
-  -Upload to the webpage by dragging and dropping or clicking and selecting.
-  -Then you need to wait for the pre-indexing to finish, and then the files and lists will show up in a section called "Finder" underneath.
-  -After that, you could move and change the locations of your database for the chatbot to more quickly locate your items.
-  -At the end of each round of change or upload, go to the bottom of the page and click "Index to Database". 
-    -This is a slower process, you will see a "Running..." The icon on the upper right of the screen, when it disappears, you are ready to go!
-    -Now go back to the Chatbot page and select IDX mode, the chatbot will now answer by quoting and mentioning the links from IDX and your database!
+ArcanaLTE 1.0 (Current)
+✔ Full Indexademics chatbot functionality
+✔ Document-based database searching
+✔ ArcanaMixup for PPT and Doc generation
+
+ArcanaExtreme ß101
+➕ All features of ArcanaLTE
+➕ Peer Advisor Journalism suite
+➕ StandardCAS™ report generator
+➕ Transcription, TTS audio, image generation, visual interpreters
+➕ Web analytics, AGI admin workflows
+
+ArcanaDB
+📁 Database creation suite for independent AI chatbots
+📁 Ideal for flexible custom data integration
 ```
-## Works Cited
-Below is the algorithms and architectures and or this project for you to cite:
+
+---
+
+## 🛡 Make It Private and Customized!
+
+Want to keep your chatbot private and unique to your needs? We've got you covered. Arcana is built with **Streamlit**, which makes it easy to:
+
+- Fork this repository 💻  
+- Deploy your own **private chatbot server** 🔐  
+- Customize settings, style, and plugins to your personal preferences 🎨
+
+---
+
+## 📘 How to Use
+
+New here? Don’t worry, angel! Here's a quick rundown of the key concepts and how you can start using Arcana today.
+
+### 🔍 Key Terms
+- **Indexing**: Converts files (PPTs, PDFs, DOCXs, CSVs, etc.) into structured, searchable data.
+- **IDXDB**: The "Database" — a temporary, session-based data cache used during chatbot interactions.
+
+### 🧭 Navigation and Interface
+
+```txt
+🌟 Chatbot Page:
+ - "Default" Mode → Uses ArcanaLTE's general AI bot
+ - "IDX" Mode → Searches your own database content (from uploaded files)
+ - "Reasoning" Mode → Uses the Qwen-QWQ model for in-depth, logical responses
+ - "Long Text" Mode → Combines indexing and the Qwen-Long Text model for longer, more contextual answers
+
+📂 Files Page:
+ - Drag and drop your files to upload them
+ - Wait for pre-indexing to finish
+ - Files will appear in the "Finder" section
+ - Organize your data and click "Index to Database" to finalize it
+ - Once indexing is complete, switch to "IDX" mode in Chatbot to begin querying your data!
 ```
-Arcana Chatbot, Indexademics. March 31st, 2025. Powered by StandardCAS™. 
+
+---
+
+## 📚 Works Cited
+
+```
+Arcana Chatbot, Indexademics. March 31st, 2025. Powered by StandardCAS™.
 FiberDB, StandardCAS™. Chengjui Fan, Juilyn Celsia. April 3, 2025.
 Qwen Architecture, Alibaba Cloud Group.
 Streamlit 1.22, Streamlit.io.
 ```
 
-## License
+---
+
+## 📜 License
+
 ```
-IDX or Indexademics grants the users of Arcana a CC-BY-ND-SA license, which means that this program cannot be derived, shared, copied, redistributed, recrafted, intruded, modified, or downloaded through unsupported unofficial links and Indexademics owns the complete copyrightable license to the Interface of the chatbot themselves, not including the used libraries utilized within the program.
+This project is licensed under CC-BY-ND-SA by Indexademics.
 
-Indexademis acknowledges StandardCAS™ to have resolved vast portions of the coding process and the hosting process. Meanwhile, Indexademics grants StandardCAS™ a lifelong, irrevocable free-to-distribute, and modify the license, under the product tagline name of "Arcana". However, each update to Arcana should be synced with Indexademics, unless otherwise specified.
+This means:
+❌ No derivatives
+❌ No unauthorized redistribution
+✅ Attribution required
+✅ Sharing with proper credit allowed
 
-The Arcanalte model is fine-tuned based on the Alibaba Cloud model Qwen, and therefore we own
+StandardCAS™ contributed to major portions of code and infrastructure. They hold a lifelong, irrevocable license to distribute and modify the Arcana platform, under synchronization with Indexademics.
 
-Copyrighted © Indexademics 2023~2025.
-Basis Copyrighted © StandardCAS™ 2019~2025.
-Powered by Standardized Coalition of Affiliated Sectors (StandardCAS™)
+The Arcanalte model is based on Qwen (Alibaba Cloud), and fine-tuned by Indexademics.
 
-Unless otherwise specified, during the beta testing version, the original creator obtains the right to revoke licensing if the project is not approved or disposed of by the content requester. 
+Copyright © Indexademics 2023–
+Copyright © StandardCAS™ 2019–
 ```
+
+> ⚠️ During the beta phase, the original creators reserve the right to revoke usage or licensing if the project is unapproved or misused.
