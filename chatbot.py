@@ -11,14 +11,20 @@ nltk.download("stopwords")
 nltk.download('punkt_tab')
  
 from fiber import *  # Import your FiberDBMS class/module
+
 # Function for the chatbot page
 def chatbot_page():
     st.title("ChatApp Interface")
   
-    # Initialize conversation history in session_state
-    if "messages" not in st.session_state:
+    # Add button to clear all messages
+    if st.button("Clear All Messages"):
+        st.session_state.messages = []
+        st.experimental_rerun()  # Rerun to reset everything and clear the chat
+
+    # Initialize conversation history in session_state if it's empty
+    if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         # Include an initial system message to define the assistant's behavior
-        st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assisstant. Ask me anything about the SHSID high school curriculum! "},{'role':'system','content':'cite the name fo the document where you received the results in the end of each response.'}]
+        st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about the SHSID high school curriculum! "},{'role':'system','content':'Cite the name of the document where you received the results at the end of each response.'}]
 
     # Display existing conversation (exclude system messages from being displayed)
     for message in st.session_state.messages:
@@ -26,23 +32,16 @@ def chatbot_page():
         if message["role"] != "system":
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-    '''
-    # Add a section for image upload
-    with st.expander("Upload an Image for Inspection", expanded=False):
-        uploaded_file = st.file_uploader("Choose an image file", type=["jpg", "jpeg", "png"])
-        if uploaded_file:
-            # Display the uploaded image
-            st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-            # Example: Add custom processing logic for the uploaded image
-            st.write("Image uploaded successfully. Add your analysis here.")
-    '''
+
     # Input box for user messages
     user_input = st.chat_input("Type your message...")
+
     # Dropdown to select the response type
     response_type = st.selectbox(
         "Choose a response type:",
         ["Normal", "IDX", "Reasoning", "Long Text"]
     )
+
     if user_input:
         # Add user message to session state
         st.session_state.messages.append({"role": "user", "content": user_input})
@@ -74,24 +73,17 @@ def chatbot_page():
     
         # Add assistant message to session state
         st.session_state.messages.append({"role": "system", "content": assistant_reply})
-        #with st.chat_message("assistant"):
-        #st.markdown(assistant_reply)
 
         # Modify the system prompt based on the response type
         system_prompt = st.session_state.messages[0]["content"]
         if response_type == "IDX":
             system_prompt = "You are an expert who provides information specifically from Indexademics Database. Cite the result's file name at the end of each query. "
-        
         else:
-            system_prompt = "You may see that there is already the content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course if there is the proper definition provided, please cite. Or else you do not need to reference under this mode. Cite the result's file name at the end of each query. "
+            system_prompt = "You may see that there is already content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course, if there is the proper definition provided, please cite. Or else you do not need to reference under this mode. Cite the result's file name at the end of each query. "
+        
         # Update the system message in session state
         st.session_state.messages[0]["content"] = system_prompt
-        '''
-        elif response_type == "Reasoning":
-            system_prompt = "You are a logical assistant who focuses on providing detailed reasoning. Cite the result's file name at the end of each query. "
-        elif response_type == "Long Text":
-            system_prompt = "You are an assistant who can solve very long questions or generate text contents."
-        '''
+
         # Fetch response from OpenAI's API
         try:
             bot_response = openai_api_call(st.session_state.messages, response_type)  # Pass the conversation history
