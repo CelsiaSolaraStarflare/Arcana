@@ -27,12 +27,17 @@ def intro_page():
     if st.button("Show MAC & IP Address"):
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
-
+        
+def ciations():
+    with open('citations.md', mode='r') as file:
+        content = file.read()
+        st.markdown(content)
 
 # Page mapping
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
+    "IDX Citations": citations, 
     "Chatbot": chatbot_page,
     "Mixup": mixup_page
 }
