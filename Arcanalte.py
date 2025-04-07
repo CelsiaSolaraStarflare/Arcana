@@ -28,7 +28,7 @@ def intro_page():
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
         
-def ciations_page():
+def citations_page():
     with open('citations.md', mode='r') as file:
         content = file.read()
         st.markdown(content)
