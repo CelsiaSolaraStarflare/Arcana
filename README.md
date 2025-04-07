@@ -4,6 +4,7 @@
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
 
+
 # 🌌 Welcome to Arcana  
 ✨ By the Indexademics Team | Powered by StandardCAS™
 
