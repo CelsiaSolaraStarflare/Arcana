@@ -28,7 +28,7 @@ def intro_page():
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
         
-def ciations():
+def ciations_page():
     with open('citations.md', mode='r') as file:
         content = file.read()
         st.markdown(content)
@@ -37,7 +37,7 @@ def ciations():
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
-    "IDX Citations": citations, 
+    "Citations": citations_page, 
     "Chatbot": chatbot_page,
     "Mixup": mixup_page
 }
