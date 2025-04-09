@@ -3,7 +3,7 @@ import streamlit as st
 
 client = OpenAI(
     base_url='https://dashscope.aliyuncs.com/compatible-mode/v1',
-    api_key=st.secrets["openai"]["api_key"],
+    api_key="sk-132282cca5d148149d274495e47bd9e8",
 )
 
 online = True
