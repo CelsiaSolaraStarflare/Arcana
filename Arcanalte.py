@@ -9,6 +9,22 @@ from longresponse import *
 import uuid
 import socket
 
+# Inject Google Analytics gtag.js
+def add_google_analytics():
+    google_analytics_code = """
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-95R15DPBEG"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-95R15DPBEG');
+    </script>
+    """
+    st.markdown(google_analytics_code, unsafe_allow_html=True)
+
+# Now call this function at the start of your Streamlit app
+add_google_analytics()
 def get_mac_address():
     return ':'.join(f'{b:02x}' for b in uuid.getnode().to_bytes(6, 'big'))
 
