@@ -130,4 +130,4 @@ Copyright © Indexademics 2023–
 Copyright © StandardCAS™ 2019–
 ```
 
-> ⚠️ During the beta phase, the original creators reserve the right to revoke usage or licensing if the project is unapproved or misused.
+> ⚠️ The ArcanaLTE version is fully sponsored by Indexademics.
