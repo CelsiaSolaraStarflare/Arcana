@@ -8,6 +8,7 @@
 
 # 🌌 Welcome to Arcana  
 ✨ By the Indexademics Team | Powered by StandardCAS™
+Version 1.0 Ash 01 (2024-4-13)
 
 --- 
 ## 📚 Table of Contents
