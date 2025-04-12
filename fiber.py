@@ -135,17 +135,29 @@ class FiberDBMS:
                     })
                     self._index_content(idx, content)
                 except Exception as e:
-                    name = line.strip().split('\t')[0]
-                    timestamp = line.strip().split('\t')[1]
-                    content = '\t'.join(line.strip().split('\t')[2:])
-                    self.database.append({
-                        "name": name,
-                        "timestamp": timestamp,
-                        "content": content,
-                        "tags": "NO TAGS ARE AVALIABLE"
-                    })
-                    self._index_content(idx, content)
-                    print(line+'is skipped due to not readable')
+                    try:
+                        name = line.strip().split('\t')[0]
+                        timestamp = line.strip().split('\t')[1]
+                        content = '\t'.join(line.strip().split('\t')[2:])
+                        
+                        # Tokenize content
+                        words = self._tokenize(content)
+                        word_counts = Counter(words)
+                        top_words = [word for word, _ in word_counts.most_common(5)]
+                        tags = ','.join(top_words) if top_words else "NO TAGS"
+                
+                        self.database.append({
+                            "name": name,
+                            "timestamp": timestamp,
+                            "content": content,
+                            "tags": tags
+                        })
+                
+                        self._index_content(idx, content)
+                        print(f"[!] Entry fixed with auto tags: {tags}")
+                    except Exception as inner_e:
+                        print(f"[X] Skipped unreadable line: {line.strip()} (error: {inner_e})")
+
 
 def main():
     dbms = FiberDBMS()
