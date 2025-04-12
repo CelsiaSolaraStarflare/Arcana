@@ -34,7 +34,7 @@ Whether you're studying for exams or building resources, Arcana is your trusty a
 You are currently using **ArcanaLTE (Minor Arcana)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
-ArcanaLTE 1.0 (Current)
+ArcanaLTE Æ101  (Current)
 ✔ Full Indexademics chatbot functionality
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
