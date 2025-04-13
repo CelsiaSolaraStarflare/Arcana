@@ -44,7 +44,12 @@ ArcanaExtreme ß101
 ➕ Peer Advisor Journalism suite
 ➕ StandardCAS™ report generator
 ➕ Transcription, TTS audio, image generation, visual interpreters
+
+ArcanaDesktop θ101 (macOS Only) 
+➕ Homework auto analysis
+➕ Task manager with auto-resolved calendar
 ➕ Web analytics, AGI admin workflows
+
 
 ArcanaDB
 📁 Database creation suite for independent AI chatbots
