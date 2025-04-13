@@ -43,8 +43,5 @@ def openai_api_call(messages, mode='Normal'):
     if chat_completion:
         if mode == 'Long Text':
             return full_content
-        with open('rt.arcana',mode'w+') as file:
-            times = int(file.read())+1
-            file.write(str(times))
             
         return chat_completion.choices[0].message.content
