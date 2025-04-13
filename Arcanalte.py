@@ -38,9 +38,6 @@ def get_ip_address():
 def intro_page():
     with open('README.md', mode='r') as file:
         content = file.read()
-        with open('rt.arcana',mode'r') as file2:
-            times = file.read()
-        st.markdown("Arcana has resolved "+times+" issues since launch!")
         st.markdown(content)
     
     if st.button("Show MAC & IP Address"):
