@@ -13,12 +13,12 @@ def openai_api_call(messages, mode='Normal'):
     if mode == 'Normal':
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model="qwen-turbo",
+            model="qwen-turbo-latest",
         )
-    elif mode == 'Reasoning':
+    elif mode == 'Math':
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model="qwq-32b",
+            model="qwen2-math-72b-instruct",
             stream=True
         )
     elif mode == 'Long Text':
