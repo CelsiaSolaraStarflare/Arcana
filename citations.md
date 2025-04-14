@@ -27,3 +27,10 @@ English:
 -‌Wilde, Oscar. 1890. The Picture of Dorian Gray. Lippincott’s Monthly Magazine.
 CS:
 ```
+## Arcana G11 Advanced Placement Formula Sheets
+```
+All Formula Sheets are Provided for Database Search.
+These are produced self-produced by Arcana for parts that are not included in the database.
+
+AP Physics 1(2025 Version)
+```
