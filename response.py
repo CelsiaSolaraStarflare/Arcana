@@ -18,7 +18,7 @@ def openai_api_call(messages, mode='Normal'):
     elif mode == 'Math':
         chat_completion = client.chat.completions.create(
             messages=messages,
-            model="qwen2-math-72b-instruct",
+            model="llama-4-maverick-17b-128e-instruct",
             stream=True
         )
     elif mode == 'Long Text':
