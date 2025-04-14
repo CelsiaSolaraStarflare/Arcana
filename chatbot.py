@@ -39,7 +39,7 @@ def chatbot_page():
     # Dropdown to select the response type
     response_type = st.selectbox(
         "Choose a response type:",
-        ["Normal", "IDX", "Reasoning", "Long Text"]
+        ["Normal", "IDX", "Math"]
     )
 
     if user_input:
