@@ -27,6 +27,9 @@ Welcome to **Arcana** — your intelligent, dynamic study resource hub! Built to
 
 Whether you're studying for exams or building resources, Arcana is your trusty academic sidekick.
 
+For users in the CLASS OF '27: The responses you receive will likely be from Peer Advisor materials. Here is a disclaimer that review guides, practice sets, and practice tests are UNOFFICIAL sources of reference and do NOT include or hint at questions in the actual exams! 
+
+
 ---
 
 ## 🔮 Available Versions
