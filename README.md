@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0Ash01-blue)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0Ash02-blue)
 ![Development Status](https://img.shields.io/badge/status-PublicInUse-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
