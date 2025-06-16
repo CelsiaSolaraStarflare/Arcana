@@ -34,7 +34,7 @@ For users in the CLASS OF '27: The responses you receive will likely be from Pee
 
 ## 🔮 Available Versions
 
-You are currently using **ArcanaLTE (Minor Arcana)**, the lightweight yet powerful version of the Indexademics platform.
+You are currently using **ArcanaLTE (Long Term Evolution)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
 ArcanaLTE Æ101  (Current)
