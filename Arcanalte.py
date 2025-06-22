@@ -36,18 +36,15 @@ def get_ip_address():
 
 # Intro page function
 def intro_page():
-    with open('README.md', mode='r') as file:
-        content = file.read()
-        st.markdown(content)
-    
+    with open('README.md', 'r', encoding='utf-8') as file:
+        st.markdown(file.read())
     if st.button("Show MAC & IP Address"):
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")
-        
+
 def citations_page():
-    with open('citations.md', mode='r') as file:
-        content = file.read()
-        st.markdown(content)
+    with open('citations.md', 'r', encoding='utf-8') as file:
+        st.markdown(file.read())
 
 # Page mapping
 pages = {
