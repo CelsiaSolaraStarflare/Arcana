@@ -14,7 +14,7 @@ from fiber import *  # Import your FiberDBMS class/module
 
 # Function for the chatbot page
 def chatbot_page():
-    st.title("ChatApp Interface")
+    st.title("Chat With Arcana")
   
     # Add button to clear all messages
     if st.button("Clear All Messages"):
@@ -24,7 +24,10 @@ def chatbot_page():
     # Initialize conversation history in session_state if it's empty
     if "messages" not in st.session_state or len(st.session_state.messages) == 0:
         # Include an initial system message to define the assistant's behavior
-        st.session_state.messages = [{"role":"assistant","content":"Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about the SHSID high school curriculum! "},{'role':'system','content':'Cite the name of the document where you received the results at the end of each response.'}]
+        st.session_state.messages = [
+            {"role": "assistant", "content": "Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about the SHSID high school curriculum! "},
+            {"role": "system", "content": "Cite the name of the document where you received the results at the end of each response. You are an expert who provides information specifically from Indexademics Database. Cite the result's file name at the end of each query. You are cute and helpful, and you are the AI ChatBot of SHSID. You are an expert in the SHSID high school curriculum. If the user is addressing you as in chat do not cite if they are not asking a question. If they are asking a question, cite the name of the document where you received the results at the end of each response. "},
+        ]
 
     # Display existing conversation (exclude system messages from being displayed)
     for message in st.session_state.messages:
@@ -51,26 +54,26 @@ def chatbot_page():
         # Tokenize and filter out stop words to get keywords
         stop_words = set(stopwords.words('english'))
         words = word_tokenize(user_input)
-        keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]  # Keep only relevant words
+        keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]
 
         dbms = FiberDBMS()
-        # Load or create the database
-        dbms.load_or_create("temp_database.txt")
+        # Load or create the database (now using CSV)
+        dbms.load_or_create("temp_database.csv")
         # Query the database using the extracted keywords
-        results = dbms.query(" ".join(keywords), top_n=20)  # Combine keywords for a relevant search query
-        
+        results = dbms.query(" ".join(keywords), top_n=min(20, max(1, len(keywords))))
+        results = results[:5]  # Ensure no more than 20 results
+
         # Create assistant reply based on database search results
         assistant_reply = ""
         if results:
             assistant_reply += "Here are the top results I found in the Indexademics Database Search:\n"
-            for idx, result in enumerate(results, 1):
+            for idx, result in enumerate(results, 5):
                 assistant_reply += f"**Result {idx}**\n"
                 assistant_reply += f"Name: {result['name']}\n"
                 assistant_reply += f"Content: {result['content']}\n"
-                assistant_reply += f"Tags: {result['tags']}\n\n"
         else:
             assistant_reply = "Sorry, I couldn't find anything relevant in the database."
-    
+
         # Add assistant message to session state
         st.session_state.messages.append({"role": "system", "content": assistant_reply})
 
@@ -80,13 +83,12 @@ def chatbot_page():
             system_prompt = "You are an expert who provides information specifically from Indexademics Database. Cite the result's file name at the end of each query. "
         else:
             system_prompt = "You may see that there is already content provided by the Indexademics Database search, however, in this default chat mode, you do not need to explain the concept based on them. Of course, if there is the proper definition provided, please cite. Or else you do not need to reference under this mode. Cite the result's file name at the end of each query. "
-        
         # Update the system message in session state
         st.session_state.messages[0]["content"] = system_prompt
 
         # Fetch response from OpenAI's API
         try:
-            bot_response = openai_api_call(st.session_state.messages, response_type)  # Pass the conversation history
+            bot_response = openai_api_call(st.session_state.messages, response_type)
             st.session_state.messages.append({"role": "assistant", "content": bot_response})
             with st.chat_message("assistant"):
                 st.markdown(bot_response)
