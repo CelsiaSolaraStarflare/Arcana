@@ -142,11 +142,14 @@ Copyright © StandardCAS™ 2019–
 > ⚠️ The ArcanaLTE version is fully sponsored by Indexademics.
 
 ## Version Logs
+```
 0.0 Base Beta 1 [Janurary 20th 2025] Initial Commit on Gradio
 0.0 Base Beta 2 [Feburary 10th 2025] Finished building webpage upon gradio (no longer in use)
 0.0 Public Beta 3 [March 30th 2025] Initial Commit on Streamlit and First showcase in SHSID
 1.0 Ash 01 - [April 12th 2025] Firstever stable and running program
 1.0 Ash 02 - [June 17th 2025] Fixed FiberDBMS crashing issues, added MixUP, resolved Chatbot Modes, Made this very pretty README.md
-
+```
+```
 1.1 Ash 01 - [June 22nd 2025] Fixed FiberDBMS to include all files, resolved indexing issues, modified chatbot prompt and usage terms
 > This is a major update including the entire rewritting of indexing.py fiber.py response.py and others.
+```
