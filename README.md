@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.1Ash01-blue)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.0Ash02-blue)
 ![Development Status](https://img.shields.io/badge/status-PublicInUse-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
@@ -8,7 +8,7 @@
 
 # 🌌 Welcome to Arcana  
 ✨ By the Indexademics Team | Powered by StandardCAS™
-[*Version 1.1 Ash 01 (2025-6-22)*]
+[*Version 1.0 Ash 02 (2025-6-15)*]
 
 --- 
 ## 📚 Table of Contents
@@ -37,10 +37,28 @@ For users in the CLASS OF '27: The responses you receive will likely be from Pee
 You are currently using **ArcanaLTE (Long Term Evolution)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
-ArcanaLTE Æ111  (Current)
+ArcanaLTE Æ102  (Current)
 ✔ Full Indexademics chatbot functionality
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
+
+ArcanaExtreme ß101
+➕ All features of ArcanaLTE
+➕ Peer Advisor Journalism suite
+➕ StandardCAS™ report generator
+➕ Transcription, TTS audio, image generation, visual interpreters
+
+ArcanaDesktop θ101 (macOS Only) 
+➕ Homework auto analysis
+➕ Task manager with auto-resolved calendar
+➕ Web analytics, AGI admin workflows
+
+
+ArcanaDB
+📁 Database creation suite for independent AI chatbots
+📁 Ideal for flexible custom data integration
+```
+
 ---
 
 ## 🛡 Make It Private and Customized!
@@ -122,18 +140,3 @@ Copyright © StandardCAS™ 2019–
 ```
 
 > ⚠️ The ArcanaLTE version is fully sponsored by Indexademics.
-
-## Version Logs
-Preface
-```
-0.0 Base Beta 1 [Janurary 20th 2025] Initial Commit on Gradio
-0.0 Base Beta 2 [Feburary 10th 2025] Finished building webpage upon gradio (no longer in use)
-0.0 Public Beta 3 [March 30th 2025] Initial Commit on Streamlit and First showcase in SHSID
-```
-Version 1
-```
-1.0 Ash 01 - [April 12th 2025] Firstever stable and running program
-1.0 Ash 02 - [June 17th 2025] Fixed FiberDBMS crashing issues, added MixUP, resolved Chatbot Modes
-1.1 Ash 01 - [June 22nd 2025] Fixed FiberDBMS to include all files, resolved indexing issues, modified prompt
-```
-> This is a major update including the entire rewritting of indexing.py fiber.py response.py and others.

@@ -19,6 +19,51 @@ def settings_page():
 
     st.write(f"Selected theme: {st.session_state.theme}")
 
-    # Apply the selected theme
-    apply_theme()
+    # --- Update Log ---
+    with st.expander("View Update Log"):
+        changelog = None
+        if "changelog_content" not in st.session_state:
+            try:
+                with open('CHANGELOG.md', 'r', encoding='utf-8') as log_file:
+                    changelog = log_file.read()
+                st.session_state.changelog_content = changelog
+            except FileNotFoundError:
+                st.session_state.changelog_content = None
+        else:
+            changelog = st.session_state.changelog_content
+        if changelog:
+            # Inject CSS to constrain height and add scrolling for long changelogs
+            st.markdown(
+                """
+                <style>
+                .changelog-box {
+                    max-height: 450px;
+                    overflow-y: auto;
+                    padding-right: 1rem;
+                    border: 1px solid var(--secondary-background-color, #444);
+                    border-radius: 6px;
+                    /* Inherit background so it works in both light and dark modes */
+                }
+                .changelog-box h1 {
+                    font-size: 1.5rem;
+                }
+                .changelog-box h2 {
+                    font-size: 1.25rem;
+                }
+                .changelog-box h3 {
+                    font-size: 1.1rem;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            # Render the markdown inside a styled div for scrolling
+            st.markdown(f"<div class='changelog-box'>{changelog}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No changelog available yet.")
+
+    # The call to apply_theme() has been removed as it was causing a NameError.
+    # To change the theme, please use the built-in Streamlit settings menu
+    # (click the three dots in the top-right corner).
+    # apply_theme()
 

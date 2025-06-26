@@ -1,36 +1,60 @@
-## ARCANA G9 CITATIONS
-```
-General lectures:
--Academic Department, Grades 9 to 10, SHSID, All Lectures and Periods, SHSID.
-Chinese:
--
-Biology:
--Miller, Kenneth R, Joseph S Levine, and Pearson Education, Inc. 2014. Biology. Boston, Massachusetts: Pearson.
-Math:
--Bass, Laurie E. 2007. California Geometry. Prentice Hall.
-Physics:
--Giancoli, Douglas C. 2014. Physics : Principles with Applications. Boston: Pearson.
--‌Zitzewitz, Paul W, and Glencoe/Mcgraw-Hill. 2009. Physics : Principles and Problems. Editorial: Columbus, Oh: Glencoe/Mcgraw-Hill.
-History:
--Elisabeth Gaynor Ellis, Ellis Esler, and Pearson Education, Inc. 2014. Prentice Hall World History. Upper Saddle River, N.J.: Pearson.
--Duiker, William J, and Jackson J Spielvogel. 2012. The Essential World History. Wadsworth Publishing Company.
-Chemistry:
--Wilbraham, Antony C, Dennis D Staley, Pearson/Prentice Hall, Michael S Matta, and Edward L Waterman. 2008. Chemistry.
--Brown, Theodore L. 2022. Chemistry : The Central Science. Harlow: Pearson Education Limited.
-Geography:
+# Academic & Resource Citations
 
-English:
--Robert Louis Stevenson. 1990. Dr. Jekyll and Mr. Hyde. New York, N.Y.: Baronet Books.
--Shakespeare, William. (1597) 2010. Romeo and Juliet. New York: Palgrave Macmillan.
--‌Hansberry, Lorraine. 1959. A Raisin in the Sun. Lewes Gmc Distribution New York, N.Y. Spark Publishing. https://khdzamlit.weebly.com/uploads/1/1/2/6/11261956/a_raisin_in_the_sun_-_lorraine_hansberry.pdf.
--Steinbeck, John. (1937) 1937. Of Mice and Men. London: Penguin Books.
--‌Wilde, Oscar. 1890. The Picture of Dorian Gray. Lippincott’s Monthly Magazine.
-CS:
-```
-## Arcana G11 Advanced Placement Formula Sheets
-```
-All Formula Sheets are Provided for Database Search.
-These are produced self-produced by Arcana for parts that are not included in the database.
+This document provides a comprehensive list of citations for the academic materials and resources used within the Arcana project.
 
-AP Physics 1(2025 Version)
-```
+## Grade 9 Curriculum
+
+The following materials form the basis of the Grade 9 curriculum content indexed in the database.
+
+### General Lectures
+- **Source:** Academic Department, Grades 9 & 10, Shanghai American School (SHSID).
+- **Content:** All lectures and in-class materials.
+
+### Subject-Specific Textbooks
+
+**Biology:**
+- Miller, Kenneth R., and Joseph S. Levine. *Biology*. Boston, MA: Pearson, 2014.
+
+**Chemistry:**
+- Wilbraham, Antony C., et al. *Chemistry*. Pearson/Prentice Hall, 2008.
+- Brown, Theodore L., et al. *Chemistry: The Central Science*. 14th ed., Pearson Education Limited, 2022.
+
+**Chinese:**
+- *Curriculum materials as provided by the SHSID Chinese Department.*
+
+**Computer Science:**
+- *Curriculum materials as provided by the SHSID Computer Science Department.*
+
+**English Language Arts:**
+- Hansberry, Lorraine. *A Raisin in the Sun*. Spark Publishing, 1959.
+- Shakespeare, William. *Romeo and Juliet*. (1597). Palgrave Macmillan, 2010.
+- Steinbeck, John. *Of Mice and Men*. (1937). Penguin Books, 1937.
+- Stevenson, Robert Louis. *Dr. Jekyll and Mr. Hyde*. Baronet Books, 1990.
+- Wilde, Oscar. *The Picture of Dorian Gray*. Lippincott's Monthly Magazine, 1890.
+
+**Geography:**
+- *Curriculum materials as provided by the SHSID Geography Department.*
+
+**History:**
+- Ellis, Elisabeth Gaynor, and Anthony Esler. *Prentice Hall World History*. Pearson, 2014.
+- Duiker, William J., and Jackson J. Spielvogel. *The Essential World History*. Wadsworth Publishing, 2012.
+
+**Mathematics:**
+- Bass, Laurie E. *California Geometry*. Prentice Hall, 2007.
+
+**Physics:**
+- Giancoli, Douglas C. *Physics: Principles with Applications*. 7th ed., Pearson, 2014.
+- Zitzewitz, Paul W. *Physics: Principles and Problems*. Glencoe/McGraw-Hill, 2009.
+
+---
+
+## Grade 11 Advanced Placement (AP) Resources
+
+This section lists supplementary materials provided for AP-level studies.
+
+### Formula Sheets
+- **Source:** Self-produced by the Arcana project team.
+- **Purpose:** To provide quick-reference formula guides for subjects where official sheets are not available or are supplemented.
+- **Included Subjects:**
+  - AP Physics 1 (2025 Syllabus)
+  - AP Chemistry (2025 Syllabus)

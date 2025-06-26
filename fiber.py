@@ -7,6 +7,12 @@ import csv
 import ast  # For safely evaluating string representations of Python literals
 
 class FiberDBMS:
+    """
+    A simple in-memory, file-backed search engine.
+    It builds an inverted index for fast keyword-based retrieval and supports
+    ranking, snippets, and dynamic tag updates.
+    The database is persisted to a CSV file.
+    """
     def __init__(self):
         self.database: List[Dict[str, str]] = []
         self.content_index: Dict[str, List[int]] = {}
@@ -117,14 +123,21 @@ class FiberDBMS:
             reader = csv.DictReader(csvfile)
             for idx, row in enumerate(reader):
                 try:
-                    # Only process rows with all required fields
+                    # Basic validation to ensure essential keys exist and are not None.
                     if not all(k in row and row[k] is not None for k in ['name', 'timestamp', 'content', 'tags']):
-                        print(f"[X] Skipped malformed row: {row}")
+                        print(f"[X] Skipped malformed row (missing keys): {row}")
                         continue
+                    
+                    # Handle cases where tags are stored as a stringified list.
                     tags = row['tags']
                     if tags.startswith('[') and tags.endswith(']'):
-                        tags_list = ast.literal_eval(tags)
-                        tags = ','.join(str(t).strip() for t in tags_list)
+                        try:
+                            tags_list = ast.literal_eval(tags)
+                            tags = ','.join(str(t).strip() for t in tags_list)
+                        except (ValueError, SyntaxError):
+                            # If literal_eval fails, keep the original string but log it.
+                            print(f"[!] Could not parse tags: {tags}")
+                    
                     entry = {
                         "name": row['name'],
                         "timestamp": row['timestamp'],
@@ -138,10 +151,14 @@ class FiberDBMS:
 
 
 def main():
+    """
+    A simple command-line interface for testing the FiberDBMS search functionality.
+    """
     dbms = FiberDBMS()
     
+    db_file = "arcana_index.csv"
     # Load or create the database
-    dbms.load_or_create("Celsiaaa.txt")
+    dbms.load_or_create(db_file)
 
     while True:
         query = input("\nEnter your search query (or 'quit' to exit): ")
@@ -166,7 +183,7 @@ def main():
             print(f"No results found for '{query}'.")
 
     # Save updated database with new tags
-    dbms.save("Celsiaaa.txt")
+    dbms.save(db_file)
 
 if __name__ == "__main__":
     main()

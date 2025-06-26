@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 # 初始化客户端
 client = OpenAI(
@@ -14,7 +15,7 @@ def longresponse_page():
     
     if st.button('获取摘要'):
         if article_content.strip() != '':
-            messages=[
+            messages: list[ChatCompletionMessageParam] = [
                 {'role': 'system', 'content': 'You are a helpful assistant.'},
                 {'role': 'user', 'content': '这篇文章讲了什么？'},
                 {'role': 'user', 'content': article_content}
@@ -28,12 +29,17 @@ def longresponse_page():
                     stream_options={"include_usage": True}
                 )
                 
-                full_content = ""
-                for chunk in completion:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        full_content += chunk.choices[0].delta.content
+                # Stream the response while extracting textual content
+                st.write("Arcana:")
+                collected_chunks = []
+                def stream_and_collect():
+                    for chunk in completion:
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            text = chunk.choices[0].delta.content
+                            collected_chunks.append(text)
+                            yield text
+                st.write_stream(stream_and_collect())
                 
-                st.write("Arcana: ", full_content)
             except Exception as e:
                 st.error(f"发生错误: {e}")
         else:

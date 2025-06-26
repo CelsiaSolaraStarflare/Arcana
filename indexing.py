@@ -3,7 +3,7 @@ import pandas as pd
 from docx import Document
 from pptx import Presentation
 import chardet
-from fiber import *
+from fiber import FiberDBMS
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
@@ -11,11 +11,9 @@ from PyPDF2 import PdfReader
 import csv
 import re
 import ast
+from config import INDEX_FILE
 
-# Download required NLTK data
-nltk.download("punkt")
-nltk.download("stopwords")
-nltk.download('punkt_tab')
+# NLTK data is now downloaded once in Arcanalte.py at startup.
 
 def extract_keywords(text, lang='en'):
     # Handles both English and Chinese, and ignores emojis/symbols
@@ -32,14 +30,22 @@ def detect_language(text):
         return 'zh'
     return 'en'
 
-def indexing(LOCAL_CACHE_DIR):
-    # Initialize the FiberDBMS instance
+def indexing(cache_dir: str):
+    """
+    Traverses a directory, processes all supported files, extracts content and
+    keywords, and builds a search index using FiberDBMS.
+
+    Args:
+        cache_dir (str): The path to the directory containing files to be indexed.
+
+    Returns:
+        int: The total number of entries indexed.
+    """
     dbms = FiberDBMS()
-    temp_db_file = "temp_database.csv"
     entries = []
 
     # Traverse the cache directory for all supported file types
-    for root, _, files in os.walk(LOCAL_CACHE_DIR):
+    for root, _, files in os.walk(cache_dir):
         for file in files:
             file_path = os.path.join(root, file)
             file_extension = os.path.splitext(file)[1].lower()
@@ -57,13 +63,16 @@ def indexing(LOCAL_CACHE_DIR):
                     content = "\n".join([para.text for para in doc.paragraphs])
                 elif file_extension == ".pptx":
                     presentation = Presentation(file_path)
-                    content = "\n".join(
-                        [
-                            (slide.shapes.title.text if slide.shapes.title else '') +
-                            "\n".join([shape.text for shape in slide.shapes if hasattr(shape, "text")])
-                            for slide in presentation.slides
-                        ]
-                    )
+                    all_texts = []
+                    for slide in presentation.slides:
+                        slide_texts = []
+                        if slide.shapes.title:
+                            slide_texts.append(slide.shapes.title.text)
+                        for shape in slide.shapes:
+                            if shape.has_text_frame:
+                                slide_texts.append(shape.text_frame.text)  # type: ignore
+                        all_texts.append("\n".join(slide_texts))
+                    content = "\n".join(all_texts)
                 elif file_extension in [".xls", ".xlsx", ".csv"]:
                     df = pd.read_excel(file_path) if "xls" in file_extension else pd.read_csv(file_path)
                     content = df.to_csv(index=False)
@@ -85,18 +94,16 @@ def indexing(LOCAL_CACHE_DIR):
                 print(f"Processed {file}: {len(entries)} entries indexed.")
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
-    print(f"Indexed {len(entries)} entries from {LOCAL_CACHE_DIR}")
+    print(f"Indexed {len(entries)} entries from {cache_dir}")
 
     # Add all entries to dbms in one go
     for name, content, tags in entries:
         dbms.add_entry(name=name, content=content, tags=tags.split(','))
 
-    # Save as CSV (UTF-8, emoji-safe)
-    with open(temp_db_file, 'w', encoding='utf-8', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['name', 'content', 'tags'])
-        writer.writerows(entries)
-    dbms.save(temp_db_file)
+    # Save the database using the dbms's save method to the configured file
+    dbms.save(INDEX_FILE)
+    print(f"Database saved to {INDEX_FILE}")
+    return len(entries)
 
 def correct_malformed_row(row):
     # If row is a dict with a single key, try to split it
