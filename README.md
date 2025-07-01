@@ -123,13 +123,13 @@ Streamlit 1.22, Streamlit.io.
 ## 📜 License
 
 ```
-This project is licensed under CC-BY-ND-SA by Indexademics.
+This project is licensed under CC-BY-SA by Indexademics.
 
 This means:
-❌ No derivatives
 ❌ No unauthorized redistribution
 ✅ Attribution required
 ✅ Sharing with proper credit allowed
+✅ Develope Alike Local Chatbots Upon this Basis
 
 StandardCAS™ contributed to major portions of code and infrastructure. They hold a lifelong, irrevocable license to distribute and modify the Arcana platform, under synchronization with Indexademics.
 
