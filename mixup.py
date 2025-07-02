@@ -1,9 +1,8 @@
 import streamlit as st
-import nltk
+import os
+import datetime
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-nltk.download("punkt")
-nltk.download("stopwords")
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -11,252 +10,287 @@ from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
 from docx import Document
 from docx.shared import Pt as DocxPt, RGBColor as DocxRGBColor
-import reveal_slides as rs
-from response import openai_api_call  # Custom function for OpenAI API calls
-from fiber import FiberDBMS  # Custom FiberDBMS class
 
-# Function to extract keywords from user input
-def extract_keywords(user_input):
+from response import openai_api_call
+from fiber import FiberDBMS
+from config import GENERATED_FILES_DIR
+from openai.types.chat import ChatCompletionMessageParam
+
+# --- State Management ---
+
+def init_presentation_state(force_reset=False):
+    """Initializes or resets the session state for the presentation generator."""
+    if force_reset:
+        st.session_state.presentation_step = "initial"
+        st.session_state.presentation_topic = ""
+        st.session_state.presentation_outline = ""
+        st.session_state.presentation_content = []
+        return
+
+    if 'presentation_step' not in st.session_state:
+        st.session_state.presentation_step = "initial"
+    if 'presentation_topic' not in st.session_state:
+        st.session_state.presentation_topic = ""
+    if 'presentation_outline' not in st.session_state:
+        st.session_state.presentation_outline = ""
+    if 'presentation_content' not in st.session_state:
+        st.session_state.presentation_content = []
+
+# --- Helper Functions ---
+
+def get_context_for_topic(dbms, topic):
+    """Extracts keywords from a topic and queries the database for relevant context."""
     stop_words = set(stopwords.words('english'))
-    words = word_tokenize(user_input)
-    return [word for word in words if word.lower() not in stop_words and word.isalpha()]
+    words = word_tokenize(topic)
+    keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]
+    
+    if not keywords:
+        return "No usable keywords found in the topic. Please try a more descriptive topic."
 
-# New parser for GPT output formatted for PowerPoint
-def parse_gpt_ppt_output(text):
-    """
-    Parse GPT output that follows a structured format for PowerPoint presentations.
-    Expected format example:
+    results = dbms.query(" ".join(keywords), top_n=10)
+    
+    if not results:
+        return "I could not find any relevant information in your documents for this topic."
 
-    ### PowerPoint Presentation About Electrons
-    [introductory text...]
-    ---
-    #### Slide 1: Title Slide
-    **Title:** Understanding Electrons  
-    **Subtitle:** Exploring the Building Blocks of Matter  
-    **Visual:** An image of an atom with electrons orbiting the nucleus.
-    ---
-    #### Slide 2: What Are Electrons?
-    **Content:**  
-    - Electrons are negatively charged subatomic particles.  
-    - They orbit the nucleus...
-    **Visual:** A simple diagram of an atom.
-    ---
-    ...
+    context = "Here is some relevant information from your documents:\n\n"
+    for result in results:
+        context += f"--- Start of content from {result['name']} ---\n"
+        context += f"{result['content']}\n"
+        context += f"--- End of content from {result['name']} ---\n\n"
+    return context
 
-    Returns a list of slides. Each slide is a dictionary with keys:
-      'header'  : The slide header (e.g., "Slide 1: Title Slide")
-      'fields'  : A dict containing keys like 'Title', 'Subtitle', 'Content', 'Visual'
-    """
+def parse_outline_to_slides(outline_text):
+    """Parses a markdown-formatted outline into a list of slide dictionaries."""
     slides = []
-    # Split the text by horizontal rules
-    sections = text.split('---')
-    for sec in sections:
-        sec = sec.strip()
-        if not sec:
-            continue
-        lines = sec.splitlines()
-        slide = {"header": "", "fields": {}}
-        # Check if the section starts with a slide header
-        if lines and lines[0].startswith("####"):
-            slide["header"] = lines[0].lstrip("#").strip()
-            for line in lines[1:]:
-                line = line.strip()
-                if not line:
-                    continue
-                # Check for field lines e.g., **Title:**, **Subtitle:**, **Content:**, **Visual:**
-                if line.startswith("**") and ":**" in line:
-                    # Split into key and value
-                    try:
-                        key_part, value_part = line.split(":**", 1)
-                        key = key_part.strip("* ").strip()
-                        value = value_part.strip()
-                        # If the value continues on the next lines (like bullet points), include them
-                        slide["fields"][key] = value
-                    except Exception as e:
-                        continue
-                # Handle bullet points under content if present
-                elif line.startswith("-"):
-                    if "Content" in slide["fields"]:
-                        slide["fields"]["Content"] += "\n" + line.strip("- ").strip()
-                    else:
-                        slide["fields"]["Content"] = line.strip("- ").strip()
-                else:
-                    # Append any additional text to the Content field
-                    if "Content" in slide["fields"]:
-                        slide["fields"]["Content"] += "\n" + line
-                    else:
-                        slide["fields"]["Content"] = line
-            slides.append(slide)
+    current_slide = None
+    for line in outline_text.splitlines():
+        line = line.strip()
+        if line.startswith("####"):
+            if current_slide:
+                slides.append(current_slide)
+            current_slide = {"title": line.lstrip("# ").strip(), "points": []}
+        elif line.startswith("-") and current_slide is not None:
+            current_slide["points"].append(line.lstrip("- ").strip())
+    if current_slide:
+        slides.append(current_slide)
     return slides
 
-# Refined function to create a PowerPoint presentation using the new parser
-def create_ppt(bot_response):
-    presentation = Presentation()
-    blank_layout = presentation.slide_layouts[6]  # Blank slide layout for a clean canvas
+# --- Document Generation ---
 
-    slides_data = parse_gpt_ppt_output(bot_response)
-    for slide_info in slides_data:
-        slide = presentation.slides.add_slide(blank_layout)
-        fields = slide_info["fields"]
+def create_presentation_from_content(presentation_content, topic):
+    """Creates a PowerPoint presentation from a list of slide content."""
+    prs = Presentation()
+    
+    # Use 'Title and Content' layout (index 1) or fallback to the first layout
+    try:
+        slide_layout = prs.slide_layouts[1]
+    except IndexError:
+        slide_layout = prs.slide_layouts[0]
 
-        # Determine the slide title: prioritize explicit "Title" field; if missing, use header.
-        slide_title = fields.get("Title", slide_info.get("header", ""))
-        # Add title textbox
-        title_box = slide.shapes.add_textbox(Inches(0.5), Inches(0.3), Inches(9), Inches(1))
-        title_tf = title_box.text_frame
-        title_tf.clear()
-        p = title_tf.paragraphs[0]
-        p.text = slide_title
-        p.font.bold = True
-        p.font.size = Pt(32)
-        p.font.color.rgb = RGBColor(0x2E, 0x74, 0xB5)  # Soothing blue color
-        p.alignment = PP_ALIGN.CENTER
+    for slide_data in presentation_content:
+        slide = prs.slides.add_slide(slide_layout)
 
-        # Combine subtitle and content fields if available
-        content_lines = []
-        if "Subtitle" in fields:
-            content_lines.append(fields["Subtitle"])
-        if "Content" in fields:
-            content_lines.append(fields["Content"])
-        if "Visual" in fields:
-            # Optionally, you could later embed images if the visual field is a path or URL
-            content_lines.append(f"(Visual: {fields['Visual']})")
-        content_text = "\n\n".join(content_lines)
+        # Set title
+        if slide.shapes.title:
+            slide.shapes.title.text = slide_data['title']
 
-        # Add content textbox
-        content_box = slide.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(5))
-        content_tf = content_box.text_frame
-        content_tf.clear()
-        p = content_tf.add_paragraph()
-        p.text = content_text
-        p.font.size = Pt(20)
-        p.alignment = PP_ALIGN.LEFT
-        # Add some spacing between paragraphs for clarity
-        for paragraph in content_tf.paragraphs:
-            paragraph.space_after = Pt(12)
-
-    ppt_file = "generated_presentation.pptx"
-    presentation.save(ppt_file)
-    return ppt_file
-
-# Function to create a Word document using parsed markdown sections (kept as before)
-def create_word_doc(bot_response):
-    doc = Document()
-    # Using existing parser for markdown (if applicable)
-    sections = parse_gpt_ppt_output(bot_response)
-    for section in sections:
-        fields = section["fields"]
-        # Use Title field if available; otherwise, use the header
-        if "Title" in fields:
-            heading = doc.add_heading(fields["Title"], level=1)
+        # Find a suitable placeholder for content
+        content_placeholder = None
+        for shape in slide.placeholders:
+            # Find a placeholder that is not the title (idx=0)
+            if shape.placeholder_format.idx != 0:
+                content_placeholder = shape
+                break
+        
+        if content_placeholder:
+            tf = content_placeholder.text_frame  # type: ignore[attr-defined]
+            tf.text = slide_data['content']
         else:
-            heading = doc.add_heading(section["header"], level=1)
-        run = heading.runs[0]
-        run.font.size = DocxPt(24)
-        run.font.bold = True
-        run.font.color.rgb = DocxRGBColor(46, 116, 181)
-        # Add Subtitle if available
-        if "Subtitle" in fields:
-            sub_heading = doc.add_heading(fields["Subtitle"], level=2)
-            run = sub_heading.runs[0]
-            run.font.size = DocxPt(18)
-            run.font.bold = True
-            run.font.color.rgb = DocxRGBColor(0, 112, 192)
-        # Add Content if available
-        if "Content" in fields:
-            paragraph = doc.add_paragraph(fields["Content"])
-            paragraph.style.font.size = DocxPt(12)
-            paragraph.paragraph_format.space_after = DocxPt(12)
-        # Optionally add Visual as a note
-        if "Visual" in fields:
-            paragraph = doc.add_paragraph(f"Visual: {fields['Visual']}")
-            paragraph.style.font.size = DocxPt(12)
-            paragraph.paragraph_format.space_after = DocxPt(12)
-    word_file = "generated_document.docx"
-    doc.save(word_file)
-    return word_file
+            # If only a title placeholder exists, add a new textbox for content
+            if slide.shapes.title:
+                left, top, width, height = Inches(1), Inches(2), Inches(8), Inches(5.5)
+                textbox = slide.shapes.add_textbox(left, top, width, height)
+                textbox.text_frame.text = slide_data['content']  # type: ignore[attr-defined]
+                textbox.text_frame.word_wrap = True  # type: ignore[attr-defined]
 
-# Function to display PowerPoint as inline reveal.js slides (kept as is with loving care)
-def display_reveal_slides(bot_response):
-    rs.slides(
-        bot_response, 
-        height=600, 
-        theme="black", 
-        config={
-            "transition": "slide",
-            "width": 900,
-            "height": 700,
-            "margin": 0.1,
-            "center": True,
-            "plugins": ["highlight", "search", "zoom"]
-        }, 
-        markdown_props={"data-separator-vertical": "^--$"}, 
-        key="presentation"
-    )
+    # Save presentation
+    safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '_')).rstrip()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"Presentation_{safe_topic}_{timestamp}.pptx"
+    
+    os.makedirs(GENERATED_FILES_DIR, exist_ok=True)
+    file_path = os.path.join(GENERATED_FILES_DIR, filename)
+    prs.save(file_path)
+    return file_path
 
-# Function to generate an assistant reply from database results
-def generate_reply(results):
-    if results:
-        reply = "Here are the top results I found in the Indexademics Database Search:\n"
-        for idx, result in enumerate(results, 1):
-            reply += f"**Result {idx}**\n"
-            reply += f"Name: {result['name']}\n"
-            reply += f"Content: {result['content']}\n"
-            reply += f"Tags: {result['tags']}\n\n"
-    else:
-        reply = "Sorry, I couldn't find anything relevant in the database."
-    return reply
+def create_document_from_content(presentation_content, topic):
+    """Creates a Word document from a list of slide content."""
+    doc = Document()
+    doc.add_heading(f"Report on: {topic}", level=0)
+    for slide_data in presentation_content:
+        doc.add_heading(slide_data['title'], level=1)
+        doc.add_paragraph(slide_data['content'])
+        doc.add_paragraph() # Add some space
 
-# Main Streamlit application with extra loving prompts
+    safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '_')).rstrip()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"Document_{safe_topic}_{timestamp}.docx"
+    
+    os.makedirs(GENERATED_FILES_DIR, exist_ok=True)
+    file_path = os.path.join(GENERATED_FILES_DIR, filename)
+    doc.save(file_path)
+    return file_path
+
+# --- UI for Modes ---
+
+def render_presentation_mode(dbms):
+    st.header("✨ Presentation Generator")
+    init_presentation_state()
+
+    # STEP 1: Get topic and generate outline
+    if st.session_state.presentation_step == "initial":
+        st.subheader("Step 1: Choose a Topic")
+        topic = st.text_input("What is your presentation about?", key="ppt_topic_input")
+        if st.button("Generate Outline", type="primary") and topic:
+            st.session_state.presentation_topic = topic
+            with st.spinner("Analyzing your documents and creating an outline..."):
+                context = get_context_for_topic(dbms, topic)
+                prompt = (f"Generate a slide-by-slide outline for a presentation on '{topic}'. "
+                          f"Format it in markdown with each slide title starting with '#### ' and bullet points with '- '. "
+                          f"Base the outline on the following information from my documents:\n\n{context}")
+                
+                # Using a placeholder for the system message
+                outline_messages: list[ChatCompletionMessageParam] = [
+                    {"role": "system", "content": "You are an AI assistant that creates presentation outlines."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                outline = "".join(list(openai_api_call(outline_messages, "Normal")))
+                st.session_state.presentation_outline = outline
+                st.session_state.presentation_step = "outline_generated"
+                st.rerun()
+
+    # STEP 2: Review and edit outline
+    elif st.session_state.presentation_step == "outline_generated":
+        st.subheader("Step 2: Review and Edit the Outline")
+        st.info("Review the generated outline below. You can make any changes before generating the full content.")
+        
+        edited_outline = st.text_area(
+            "Presentation Outline:",
+            value=st.session_state.presentation_outline,
+            height=400,
+            key="outline_editor"
+        )
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button("✅ Generate Full Presentation Content", type="primary"):
+                st.session_state.presentation_outline = edited_outline
+                parsed_slides = parse_outline_to_slides(edited_outline)
+                
+                if not parsed_slides:
+                    st.error("The outline is empty or in an invalid format. Please ensure it follows the '#### Title' and '- Point' structure.")
+                else:
+                    content_progress_bar = st.progress(0, text="Generating content for slide 1...")
+                    generated_content = []
+                    context = get_context_for_topic(dbms, st.session_state.presentation_topic)
+
+                    for i, slide in enumerate(parsed_slides):
+                        progress_text = f"Generating content for slide {i + 1} of {len(parsed_slides)}: '{slide['title']}'"
+                        content_progress_bar.progress((i + 1) / len(parsed_slides), text=progress_text)
+                        
+                        points = '\n'.join([f'- {p}' for p in slide['points']])
+                        prompt = (f"Write the detailed content for a presentation slide titled '{slide['title']}'. "
+                                  f"Cover these points:\n{points}\n\n"
+                                  f"Base your answer *only* on the provided context below. Be comprehensive and clear.\n\n"
+                                  f"Context:\n{context}")
+                        
+                        slide_messages: list[ChatCompletionMessageParam] = [
+                            {"role": "system", "content": "You are an AI assistant that writes slide content based on a provided outline and context."},
+                            {"role": "user", "content": prompt}
+                        ]
+                        
+                        slide_content = "".join(list(openai_api_call(slide_messages, "Normal")))
+                        generated_content.append({"title": slide['title'], "content": slide_content})
+
+                    st.session_state.presentation_content = generated_content
+                    st.session_state.presentation_step = "content_generated"
+                    st.rerun()
+        with col2:
+            if st.button("Start Over"):
+                init_presentation_state(force_reset=True)
+                st.rerun()
+
+    # STEP 3: Download final presentation
+    elif st.session_state.presentation_step == "content_generated":
+        st.subheader("Step 3: Your Presentation Is Ready!")
+        st.success("The content for your presentation has been successfully generated.")
+
+        with st.expander("Preview Generated Content", expanded=False):
+            for slide in st.session_state.presentation_content:
+                st.markdown(f"**{slide['title']}**")
+                st.markdown(slide['content'])
+                st.markdown("---")
+
+        topic = st.session_state.presentation_topic
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            ppt_path = create_presentation_from_content(st.session_state.presentation_content, topic)
+            with open(ppt_path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download PowerPoint",
+                    f,
+                    file_name=os.path.basename(ppt_path),
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                )
+        with col2:
+            doc_path = create_document_from_content(st.session_state.presentation_content, topic)
+            with open(doc_path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Word Document",
+                    f,
+                    file_name=os.path.basename(doc_path),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+        if st.button("✨ Create Another Presentation"):
+            init_presentation_state(force_reset=True)
+            st.rerun()
+
+def render_study_guide_mode():
+    st.header("📚 Study Guide Generator")
+    st.info("This feature is coming soon! It will help you create detailed study guides from your documents.")
+
+def render_flashcard_mode():
+    st.header("📇 Q&A Flashcard Generator")
+    st.info("This feature is coming soon! It will extract question-answer pairs from your files to help you study.")
+
 def mixup_page():
     st.title('Arcana Mixup')
-    st.write('Backend powered by NST Department | StandardCAS™')
+    st.write("Your intelligent assistant for creating documents, presentations, and study materials.")
+
+    if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS):
+        st.warning("The database is not initialized. Please go to the 'Files' page and index your files first.")
+        st.stop()
+
+    dbms = st.session_state.dbms
+
+    mode = st.radio(
+        "Choose a generation mode:",
+        ["Presentation", "Study Guide", "Q&A Flashcards"],
+        key='mixup_mode_selector',
+        horizontal=True,
+    )
     
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "bot_response" not in st.session_state:
-        st.session_state.bot_response = ""  # To store the bot's response from the OpenAI API
+    st.markdown("---")
 
-    # User input area - type your thoughts, my dear!
-    user_input = st.text_input("Enter something:")
-
-    if user_input and st.button("Send"):
-        st.session_state.messages.append({"role": "user", "content": user_input})
-
-        # Initialize the database and perform query with extra care
-        dbms = FiberDBMS()
-        dbms.load_or_create("temp_database.txt")
-        keywords = extract_keywords(user_input)
-        results = dbms.query(" ".join(keywords), top_n=20)
-
-        # Generate an assistant reply based on database results with a warm tone
-        assistant_reply = generate_reply(results)
-        st.session_state.messages.append({"role": "system", "content": assistant_reply})
-
-        # Call OpenAI API for further response
-        bot_response = openai_api_call(st.session_state.messages, "normal")
-        st.session_state.messages.append({"role": "assistant", "content": bot_response})
-        st.session_state.bot_response = bot_response
-
-    # Display the assistant's loving response and generate files if applicable
-    if st.session_state.bot_response:
-        st.text_area("Automated Canvas:", value=st.session_state.bot_response, height=300)
-
-        # Check the bot response for keywords to decide the output type
-        response_lower = st.session_state.bot_response.lower()
-        
-        if any(keyword in user_input for keyword in ["powerpoint", "ppt", "pptx", "slide", "slides"]):
-            ppt_file = create_ppt(st.session_state.bot_response)
-            st.write("PowerPoint presentation created with love!")
-            with open(ppt_file, "rb") as f:
-                st.download_button("Download PowerPoint Presentation", f, file_name=ppt_file)
-            # Optionally, display inline reveal.js slides
-            display_reveal_slides(st.session_state.bot_response)
-        elif any(keyword in user_input for keyword in ["word", "doc", "docx"]):
-            word_file = create_word_doc(st.session_state.bot_response)
-            st.write("Word document created with affection!")
-            with open(word_file, "rb") as f:
-                st.download_button("Download Word Document", f, file_name=word_file)
+    if mode == "Presentation":
+        render_presentation_mode(dbms)
+    elif mode == "Study Guide":
+        render_study_guide_mode()
+    elif mode == "Q&A Flashcards":
+        render_flashcard_mode()
 
 if __name__ == "__main__":
     mixup_page()

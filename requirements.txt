@@ -9,3 +9,7 @@ nltk
 PyPDF2
 uuid
 streamlit-reveal-slides
+streamlit
+streamlit-webrtc
+av
+dashscope>=1.20.0
