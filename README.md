@@ -42,7 +42,7 @@ ArcanaLTE Æ151
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
 
-ArcanaExtreme ß102 (Current)
+ArcanaExtreme ß103 (Current)
 ➕ Contour Design
 ➕ All features of ArcanaLTE
 ➕ Peer Advisor Journalism suite
