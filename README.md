@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaExtreme%201.0Beta2-black)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaExtreme%201.0Beta3-black)
 ![Development Status](https://img.shields.io/badge/status-Beta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
@@ -8,7 +8,7 @@
 
 # 🌌 Welcome to Arcana Extreme  
 ✨ By the Indexademics Team | Powered by StandardCAS™
-[*Version 1.0 Beta 02 (2025-07-02)*]
+[*Version 1.0 Beta 03 (2025-07-04)*]
 
 --- 
 ## 📚 Table of Contents
