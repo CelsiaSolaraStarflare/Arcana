@@ -42,6 +42,16 @@ def indexing(cache_dir: str):
         int: The total number of entries indexed.
     """
     dbms = FiberDBMS()
+    # Load existing database if present to avoid duplicates
+    existing_entries = set()
+    if os.path.exists(INDEX_FILE):
+        try:
+            dbms.load_from_file(INDEX_FILE)
+            existing_entries = {(e['name'], e['content']) for e in dbms.database}
+            print(f"Loaded existing index with {len(existing_entries)} entries. New indexing will skip duplicates.")
+        except Exception as exc:
+            print(f"Could not load existing index for duplicate checking: {exc}")
+
     entries = []
 
     # Traverse the cache directory for all supported file types
@@ -86,17 +96,18 @@ def indexing(cache_dir: str):
                 if content:  # Ensure content is not None
                     for i in content.split('\n'):
                         i = i.strip()
-                        if i:
+                        if i and (file, i) not in existing_entries:
                             lang = detect_language(i)
                             keywords = extract_keywords(i, lang)
                             entries.append([file, i, ','.join(keywords)])
+                            existing_entries.add((file, i))  # avoid duplicates within same run
                 #print('The database has been indexed')
                 print(f"Processed {file}: {len(entries)} entries indexed.")
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
     print(f"Indexed {len(entries)} entries from {cache_dir}")
 
-    # Add all entries to dbms in one go
+    # Add all new entries to dbms in one go
     for name, content, tags in entries:
         dbms.add_entry(name=name, content=content, tags=tags.split(','))
 

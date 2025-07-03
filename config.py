@@ -22,4 +22,8 @@ INDEX_FILE = "arcana_index.csv"
 APP_TITLE = "Arcana"
 
 # A list of supported file extensions that the application can process and index.
-SUPPORTED_FILE_TYPES = ["txt", "pdf", "csv", "docx", "pptx"] 
+SUPPORTED_FILE_TYPES = ["txt", "pdf", "csv", "docx", "pptx"]
+
+# For long response (Qwen model)
+QWEN_API_KEY = ""  # Enter your Qwen API key here
+QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1" 

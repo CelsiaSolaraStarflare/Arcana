@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "streamlit-theta"
+version = "1.0.0"
+description = "A PowerPoint/Keynote-style visual slide editor for Streamlit"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Arcana Team", email = "team@arcana.dev"}
+]
+keywords = ["streamlit", "powerpoint", "keynote", "presentation", "visual", "editor", "slides"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers", 
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8", 
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Framework :: Streamlit",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "streamlit>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/arcana/streamlit-theta"
+"Bug Reports" = "https://github.com/arcana/streamlit-theta/issues"
+Source = "https://github.com/arcana/streamlit-theta"
+
+[tool.setuptools.packages.find]
+include = ["streamlit_theta*"]
+exclude = ["IDXDB*", "__pycache__*", "generated*", "plugin*", "*.pyc"]
+
+[tool.setuptools.package-data]
+streamlit_theta = ["*.py"] 

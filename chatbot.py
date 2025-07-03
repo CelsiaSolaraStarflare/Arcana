@@ -84,7 +84,7 @@ def chatbot_page():
                     if file_content:
                         # Index the new file content into the database
                         with st.spinner(f"Indexing {uploaded_file.name}..."):
-                            lines = file_content.split('\\n')
+                            lines = file_content.split('\n')
                             for line in lines:
                                 line = line.strip()
                                 if line:
@@ -101,7 +101,7 @@ def chatbot_page():
                             f"Ignore any previous search results from the general document database. "
                             f"All answers must come directly from the file content provided below. "
                             f"Explicitly mention that you are answering based on the uploaded file."
-                            f"\\n\\n--- FILE CONTENT ---\\n{file_content}\\n--- END FILE CONTENT ---"
+                            f"\n\n--- FILE CONTENT ---\n{file_content}\n--- END FILE CONTENT ---"
                         )
                         st.session_state.messages.append({"role": "system", "content": context_message})
                         st.session_state.processed_file_name = uploaded_file.name
