@@ -17,6 +17,10 @@ class FiberDBMS:
         self.database: List[Dict[str, str]] = []
         self.content_index: Dict[str, List[int]] = {}
 
+    def is_empty(self) -> bool:
+        """Checks if the database has any entries."""
+        return not self.database
+
     def add_entry(self, name: str, content: str, tags: List[str]) -> None:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         entry = {

@@ -13,3 +13,6 @@ streamlit
 streamlit-webrtc
 av
 dashscope>=1.20.0
+
+# Optional dependencies for enhanced features
+# streamlit-theta  # Uncomment for visual PPT editor in Mixup
