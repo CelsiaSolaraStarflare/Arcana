@@ -1,14 +1,14 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaExtreme%201.1Beta1-black)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.5Beta2-orange)
 ![Development Status](https://img.shields.io/badge/status-Beta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
 
 ---
 
-# 🌌 Welcome to Arcana Extreme  
+# 🌌 Welcome to ArcanaLTE  
 ✨ By the Indexademics Team | Powered by StandardCAS™
-[*Version 1.1 Beta 01 (2025-07-06)*]
+[*Version 1.5 Beta 02 (2025-07-06)*]
 
 --- 
 ## 📚 Table of Contents
@@ -23,7 +23,7 @@
 
 ## 💖 Introduction
 
-Welcome to **Arcana Extreme** — your intelligent, dynamic study resource hub! Built to empower students with fast and accurate support, Arcana is designed to help you succeed in your learning journey through smart question answering, document indexing, and rich content generation.
+Welcome to **ArcanaLTE** — your intelligent, dynamic study resource hub! Built to empower students with fast and accurate support, Arcana is designed to help you succeed in your learning journey through smart question answering, document indexing, and rich content generation.
 
 Whether you're studying for exams or building resources, Arcana is your trusty academic sidekick.
 
@@ -37,12 +37,12 @@ For users in the CLASS OF '27: The responses you receive will likely be from Pee
 You are currently using **ArcanaLTE (Long Term Evolution)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
-ArcanaLTE Æ151 
+ArcanaLTE Æ152 (Current)
 ✔ Full Indexademics chatbot functionality
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
 
-ArcanaExtreme ß111 (Current)
+ArcanaExtreme ß111 
 ➕ Contour Design
 ➕ All features of ArcanaLTE
 ➕ Peer Advisor Journalism suite
