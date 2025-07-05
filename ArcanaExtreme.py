@@ -11,6 +11,7 @@ from finder import files_page
 from chatbot import chatbot_page
 from settings import settings_page
 from mixup import mixup_page
+from flashcards import flashcards_page
 from longresponse import longresponse_page
 from editor import editor_page
 from speech_to_text import speech_to_text_page
@@ -120,6 +121,7 @@ pages = {
     "Chatbot": chatbot_page,
     "Speech to Text": speech_to_text_page,
     "Mixup": mixup_page,
+    "Flashcards": flashcards_page,
     "Editor": editor_page,
     "Long Response": longresponse_page,
     "Settings": settings_page
@@ -189,6 +191,7 @@ page_icons = {
     "Chatbot": "💬",
     "Speech to Text": "🎙️",
     "Mixup": "🔀",
+    "Flashcards": "🧠",
     "Editor": "📝",
     "Long Response": "🗒️",
     "Settings": "⚙️",
@@ -202,6 +205,7 @@ page_colors = {
     "Chatbot": "#69db7c",        # green
     "Speech to Text": "#38d9a9", # teal
     "Mixup": "#4dabf7",          # blue
+    "Flashcards": "#ff8cc8",     # pink
     "Editor": "#9775fa",         # purple
     "Long Response": "#e599f7",   # violet
     "Settings": "#868e96",        # gray

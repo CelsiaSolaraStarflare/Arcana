@@ -6,6 +6,9 @@ import datetime
 import re
 import io
 import requests
+
+# Ensure NLTK data is available before importing NLTK functions
+import nltk_setup
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
@@ -20,6 +23,348 @@ from pptx.enum.text import MSO_AUTO_SIZE
 from docx import Document
 from docx.shared import Pt as DocxPt, RGBColor as DocxRGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH  # type: ignore
+
+# --- Markdown Parser for Word Documents ---
+
+def parse_mixed_formatting_to_runs(paragraph, text):
+    """
+    Parses text that may contain both markdown and custom font tags,
+    and adds formatted runs to a Word paragraph.
+    Handles: **bold**, *italic*, `code`, [links], [font] tags, etc.
+    """
+    # First handle custom font tags which have priority
+    parts = []
+    current_text = text
+    
+    # Split by custom font tags
+    font_parts = re.split(r'(\[font[^\]]*\]|\[/font\])', current_text)
+    style_stack = [{'bold': None, 'italic': None, 'underline': None, 'name': None, 'size': None, 'color': None}]
+    
+    for part in font_parts:
+        if not part:
+            continue
+            
+        if part.startswith('[font'):
+            # Parse font attributes
+            new_style = style_stack[-1].copy()
+            attrs = {}
+            attr_string = part[part.find(' '):-1].strip() if ' ' in part else ''
+            pairs = re.findall(r'(\w+)=(".*?"|\'.*?\'|[^\s\']*)', attr_string)
+            for key, value in pairs:
+                attrs[key.lower()] = value.strip("'\"")
+
+            if 'bold' in attrs: new_style['bold'] = attrs['bold'].lower() == 'true'
+            if 'italic' in attrs: new_style['italic'] = attrs['italic'].lower() == 'true'
+            if 'underline' in attrs: new_style['underline'] = attrs['underline'].lower() == 'true'
+            if 'name' in attrs: new_style['name'] = attrs['name']
+            if 'size' in attrs:
+                try: new_style['size'] = DocxPt(int(attrs['size']))
+                except ValueError: pass
+            if 'color' in attrs:
+                try: new_style['color'] = DocxRGBColor.from_string(attrs['color'].replace("#", ""))
+                except (ValueError, KeyError): pass
+            style_stack.append(new_style)
+            
+        elif part == '[/font]':
+            if len(style_stack) > 1:
+                style_stack.pop()
+                
+        else:
+            # This is actual text content - apply current font style and then parse markdown
+            current_style = style_stack[-1]
+            
+            # Now parse markdown within this text part
+            markdown_parts = parse_markdown_inline(part)
+            
+            for md_part in markdown_parts:
+                combined_style = current_style.copy()
+                
+                # Combine custom font style with markdown style
+                if md_part.get('bold'): combined_style['bold'] = True
+                if md_part.get('italic'): combined_style['italic'] = True
+                if md_part.get('code'): 
+                    combined_style['name'] = 'Consolas'
+                    combined_style['background'] = 'light_gray'
+                if md_part.get('underline'): combined_style['underline'] = True
+                if md_part.get('link'): 
+                    combined_style['color'] = DocxRGBColor(0, 0, 255)
+                    combined_style['underline'] = True
+                
+                parts.append({
+                    'text': md_part['text'], 
+                    'style': combined_style
+                })
+    
+    # Apply all parts to the paragraph
+    for part in parts:
+        if not part['text'].strip():
+            continue
+            
+        run = paragraph.add_run(part['text'])
+        style = part['style']
+        
+        # Apply formatting
+        if style.get('bold'):
+            run.font.bold = True
+        if style.get('italic'):
+            run.font.italic = True
+        if style.get('underline'):
+            run.font.underline = True
+        if style.get('name'):
+            run.font.name = style['name']
+        if style.get('size'):
+            run.font.size = style['size']
+        if style.get('color'):
+            run.font.color.rgb = style['color']
+        if style.get('background') == 'light_gray':
+            run.font.highlight_color = 7
+
+def parse_markdown_inline(text):
+    """
+    Parses inline markdown formatting and returns a list of text parts with formatting info.
+    """
+    # Patterns for inline markdown
+    patterns = [
+        (r'\*\*(.*?)\*\*', 'bold'),      # **bold**
+        (r'(?<!\*)\*([^*]+?)\*(?!\*)', 'italic'),  # *italic* (not part of **)
+        (r'`(.*?)`', 'code'),            # `code`
+        (r'_\_(.*?)__', 'underline'),    # __underline__
+        (r'(?<!_)_([^_]+?)_(?!_)', 'italic'),      # _italic_ (not part of __)
+        (r'\[(.*?)\]\((.*?)\)', 'link'), # [text](url)
+    ]
+    
+    # Start with the full text
+    parts = [{'text': text, 'formatting': {}}]
+    
+    # Apply each pattern
+    for pattern, format_type in patterns:
+        new_parts = []
+        for part in parts:
+            if part.get('processed'):
+                new_parts.append(part)
+                continue
+                
+            text_to_process = part['text']
+            current_formatting = part.get('formatting', {}).copy()
+            
+            # Find all matches
+            matches = list(re.finditer(pattern, text_to_process))
+            if not matches:
+                new_parts.append(part)
+                continue
+            
+            last_end = 0
+            for match in matches:
+                # Add text before match
+                if match.start() > last_end:
+                    before_text = text_to_process[last_end:match.start()]
+                    if before_text:
+                        new_parts.append({'text': before_text, 'formatting': current_formatting.copy()})
+                
+                # Add formatted text
+                if format_type == 'link':
+                    link_text = match.group(1)
+                    link_url = match.group(2)
+                    link_formatting = current_formatting.copy()
+                    link_formatting['link'] = link_url
+                    new_parts.append({'text': link_text, 'formatting': link_formatting, 'processed': True})
+                else:
+                    matched_text = match.group(1)
+                    matched_formatting = current_formatting.copy()
+                    matched_formatting[format_type] = True
+                    new_parts.append({'text': matched_text, 'formatting': matched_formatting, 'processed': True})
+                
+                last_end = match.end()
+            
+            # Add remaining text
+            if last_end < len(text_to_process):
+                remaining_text = text_to_process[last_end:]
+                if remaining_text:
+                    new_parts.append({'text': remaining_text, 'formatting': current_formatting.copy()})
+        
+        parts = new_parts
+    
+    # Convert to final format
+    result = []
+    for part in parts:
+        formatting = part.get('formatting', {})
+        result.append({
+            'text': part['text'],
+            'bold': formatting.get('bold', False),
+            'italic': formatting.get('italic', False),
+            'code': formatting.get('code', False),
+            'underline': formatting.get('underline', False),
+            'link': formatting.get('link', None)
+        })
+    
+    return result
+
+def parse_markdown_to_word_runs(paragraph, text):
+    """
+    Parses markdown-like text and adds formatted runs to a Word paragraph.
+    Supports: **bold**, *italic*, `code`, [links], and basic formatting.
+    """
+    # Use the new mixed formatting parser for backward compatibility
+    parse_mixed_formatting_to_runs(paragraph, text)
+
+def parse_markdown_content_to_word(doc, content):
+    """
+    Parses markdown content and adds it to a Word document with proper formatting.
+    Handles headers, lists, paragraphs, code blocks, tables, and inline formatting.
+    """
+    lines = content.split('\n')
+    current_list_level = 0
+    in_code_block = False
+    code_block_content = []
+    in_table = False
+    table_rows = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped_line = line.strip()
+        
+        # Handle code blocks
+        if stripped_line.startswith('```'):
+            if in_code_block:
+                # End code block
+                if code_block_content:
+                    code_para = doc.add_paragraph()
+                    code_run = code_para.add_run('\n'.join(code_block_content))
+                    code_run.font.name = 'Consolas'
+                    code_run.font.size = DocxPt(10)
+                    code_para.paragraph_format.left_indent = DocxPt(20)
+                code_block_content = []
+                in_code_block = False
+            else:
+                in_code_block = True
+            i += 1
+            continue
+        
+        if in_code_block:
+            code_block_content.append(line)
+            i += 1
+            continue
+        
+        # Handle tables
+        if '|' in stripped_line and stripped_line.count('|') >= 2:
+            # Check if this looks like a table
+            if not in_table:
+                # Start collecting table rows
+                table_rows = []
+                in_table = True
+            
+            # Parse table row
+            cells = [cell.strip() for cell in stripped_line.split('|')]
+            # Remove empty cells at start/end (markdown table format)
+            if cells and not cells[0]:
+                cells = cells[1:]
+            if cells and not cells[-1]:
+                cells = cells[:-1]
+            
+            # Check if this is a separator row (contains only dashes, spaces, and |)
+            if all(re.match(r'^[\s\-\:]*$', cell) for cell in cells):
+                # This is a separator row, skip it but keep building table
+                i += 1
+                continue
+            
+            table_rows.append(cells)
+            i += 1
+            continue
+        else:
+            # End of table if we were in one
+            if in_table and table_rows:
+                # Create the table
+                if table_rows:
+                    num_cols = max(len(row) for row in table_rows) if table_rows else 1
+                    table = doc.add_table(rows=len(table_rows), cols=num_cols)
+                    table.style = 'Table Grid'
+                    
+                    for row_idx, row_data in enumerate(table_rows):
+                        for col_idx, cell_text in enumerate(row_data):
+                            if col_idx < num_cols:
+                                cell = table.cell(row_idx, col_idx)
+                                # Handle custom font tags and markdown in cells
+                                parse_mixed_formatting_to_runs(cell.paragraphs[0], cell_text)
+                                # Make header row bold
+                                if row_idx == 0:
+                                    for run in cell.paragraphs[0].runs:
+                                        run.font.bold = True
+                
+                table_rows = []
+                in_table = False
+        
+        # Skip empty lines
+        if not stripped_line:
+            i += 1
+            continue
+        
+        # Handle headers (including custom font tags)
+        if stripped_line.startswith('#'):
+            header_level = len(stripped_line) - len(stripped_line.lstrip('#'))
+            header_text = stripped_line.lstrip('# ').strip()
+            
+            if header_level <= 3:
+                heading = doc.add_heading(header_text, level=header_level)
+                # Handle custom font tags in headers
+                if '[font' in header_text:
+                    heading.clear()
+                    parse_mixed_formatting_to_runs(heading, header_text)
+            else:
+                # For h4, h5, h6, use bold paragraph
+                para = doc.add_paragraph()
+                parse_mixed_formatting_to_runs(para, header_text)
+                # Make it bold by default
+                for run in para.runs:
+                    run.font.bold = True
+                    run.font.size = DocxPt(12 if header_level == 4 else 11)
+        
+        # Handle lists
+        elif stripped_line.startswith(('- ', '* ', '+ ')):
+            list_text = stripped_line[2:].strip()
+            para = doc.add_paragraph(style='List Bullet')
+            parse_mixed_formatting_to_runs(para, list_text)
+        
+        elif re.match(r'^\d+\. ', stripped_line):
+            list_text = re.sub(r'^\d+\. ', '', stripped_line).strip()
+            para = doc.add_paragraph(style='List Number')
+            parse_mixed_formatting_to_runs(para, list_text)
+        
+        # Handle blockquotes
+        elif stripped_line.startswith('>'):
+            quote_text = stripped_line.lstrip('> ').strip()
+            para = doc.add_paragraph()
+            para.paragraph_format.left_indent = DocxPt(20)
+            run = para.add_run(f'"{quote_text}"')
+            run.font.italic = True
+        
+        # Handle horizontal rules
+        elif stripped_line in ['---', '***', '___']:
+            para = doc.add_paragraph('_' * 50)
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Handle regular paragraphs
+        else:
+            para = doc.add_paragraph()
+            parse_mixed_formatting_to_runs(para, stripped_line)
+        
+        i += 1
+    
+    # Handle any remaining table at the end
+    if in_table and table_rows:
+        if table_rows:
+            num_cols = max(len(row) for row in table_rows) if table_rows else 1
+            table = doc.add_table(rows=len(table_rows), cols=num_cols)
+            table.style = 'Table Grid'
+            
+            for row_idx, row_data in enumerate(table_rows):
+                for col_idx, cell_text in enumerate(row_data):
+                    if col_idx < num_cols:
+                        cell = table.cell(row_idx, col_idx)
+                        parse_mixed_formatting_to_runs(cell.paragraphs[0], cell_text)
+                        if row_idx == 0:
+                            for run in cell.paragraphs[0].runs:
+                                run.font.bold = True
 
 # --- State Management ---
 
@@ -40,6 +385,33 @@ def init_presentation_state(force_reset=False):
         st.session_state.presentation_outline = ""
     if 'presentation_content' not in st.session_state:
         st.session_state.presentation_content = []
+
+def init_study_guide_state(force_reset=False):
+    """Initializes or resets the session state for the study guide generator."""
+    if force_reset:
+        st.session_state.study_guide_step = "initial"
+        st.session_state.study_guide_topic = ""
+        st.session_state.study_guide_style = "comprehensive"
+        st.session_state.study_guide_extreme_mode = False
+        st.session_state.study_guide_page_count = -1
+        st.session_state.study_guide_outline = ""
+        st.session_state.study_guide_content = []
+        return
+
+    if 'study_guide_step' not in st.session_state:
+        st.session_state.study_guide_step = "initial"
+    if 'study_guide_topic' not in st.session_state:
+        st.session_state.study_guide_topic = ""
+    if 'study_guide_style' not in st.session_state:
+        st.session_state.study_guide_style = "comprehensive"
+    if 'study_guide_extreme_mode' not in st.session_state:
+        st.session_state.study_guide_extreme_mode = False
+    if 'study_guide_page_count' not in st.session_state:
+        st.session_state.study_guide_page_count = -1
+    if 'study_guide_outline' not in st.session_state:
+        st.session_state.study_guide_outline = ""
+    if 'study_guide_content' not in st.session_state:
+        st.session_state.study_guide_content = []
 
 # --- Helper Functions ---
 
@@ -79,6 +451,72 @@ def parse_outline_to_slides(outline_text):
     if current_slide:
         slides.append(current_slide)
     return slides
+
+def parse_outline_to_sections(outline_text):
+    """Parses a markdown-formatted outline into a list of study guide sections."""
+    sections = []
+    current_section = None
+    for line in outline_text.splitlines():
+        line = line.strip()
+        if line.startswith("##"):  # Main sections
+            if current_section:
+                sections.append(current_section)
+            current_section = {"title": line.lstrip("# ").strip(), "subsections": []}
+        elif line.startswith("-") and current_section is not None:
+            current_section["subsections"].append(line.lstrip("- ").strip())
+    if current_section:
+        sections.append(current_section)
+    return sections
+
+def get_study_guide_style_prompt(style):
+    """Returns the appropriate prompt modification based on study guide style."""
+    style_prompts = {
+        "comprehensive": "Create a detailed, comprehensive study guide with thorough explanations, examples, and practice questions.",
+        "summary": "Create a concise summary-style study guide focusing on key points and essential information.",
+        "outline": "Create a structured outline-format study guide with hierarchical organization of topics.",
+        "flashcard_prep": "Create a study guide optimized for flashcard creation with clear definitions and Q&A format.",
+        "exam_focused": "Create an exam-focused study guide with emphasis on likely test questions and critical concepts."
+    }
+    return style_prompts.get(style, style_prompts["comprehensive"])
+
+def get_page_count_instructions(page_count, total_sections):
+    """Returns content length instructions based on target page count."""
+    if page_count == -1:
+        return "Write comprehensive content with natural length based on topic complexity."
+    
+    # Estimate words per page for study guide format (160-200 words per page)
+    # Using 180 words per page as a middle ground for study guides with headers, lists, and formatting
+    words_per_page = 180
+    total_target_words = page_count * words_per_page
+    words_per_section = total_target_words // max(total_sections, 1)
+    
+    if page_count <= 5:
+        length_instruction = f"Keep content concise and focused. Aim for approximately {words_per_section} words per section (~{page_count} total pages at ~{words_per_page} words/page for study guide format)."
+    elif page_count <= 15:
+        length_instruction = f"Provide balanced detail with moderate length. Aim for approximately {words_per_section} words per section (~{page_count} total pages at ~{words_per_page} words/page for study guide format)."
+    elif page_count <= 30:
+        length_instruction = f"Create comprehensive, detailed content. Aim for approximately {words_per_section} words per section (~{page_count} total pages at ~{words_per_page} words/page for study guide format)."
+    else:
+        length_instruction = f"Generate extensive, thorough content with maximum detail. Aim for approximately {words_per_section} words per section (~{page_count} total pages at ~{words_per_page} words/page for study guide format)."
+    
+    # Add specific reminder about study guide formatting
+    length_instruction += f" Remember to use study guide formatting with headers, bullet points, and clear sections which affects word density per page."
+    
+    return length_instruction
+
+def get_markdown_formatting_instructions():
+    """Returns instructions for proper markdown formatting in generated content."""
+    return """
+Format your response using proper markdown:
+- Use **bold** for key terms and important concepts
+- Use *italic* for emphasis and definitions
+- Use `code formatting` for technical terms, formulas, or specific examples
+- Use ### Headers for main sections and #### for subsections
+- Use - bullet points for lists and key points
+- Use 1. numbered lists for step-by-step processes
+- Use > blockquotes for important notes or quotes
+- Use --- for section dividers where appropriate
+"""
 
 def add_formatted_text_to_shape(shape, text: str):
     """
@@ -203,13 +641,75 @@ def create_document_from_content(presentation_content, topic):
     doc.save(file_path)
     return file_path
 
+def create_study_guide_from_content(study_guide_content, topic, style, extreme_mode=False):
+    """Creates a Word document study guide from a list of section content."""
+    doc = Document()
+    
+    # Add title and metadata
+    title = doc.add_heading(f"Study Guide: {topic}", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # Add metadata
+    metadata_p = doc.add_paragraph()
+    metadata_p.add_run(f"Generated: {datetime.datetime.now().strftime('%B %d, %Y at %I:%M %p')}\n")
+    metadata_p.add_run(f"Style: {style.replace('_', ' ').title()}\n")
+    metadata_p.add_run(f"Generation Mode: {'🚀 Extreme Mode' if extreme_mode else '⚡ Fast Mode'}\n")
+    metadata_p.add_run(f"Sections: {len(study_guide_content)}")
+    metadata_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    doc.add_page_break()
+    
+    # Add table of contents
+    toc_heading = doc.add_heading("Table of Contents", level=1)
+    for idx, section_data in enumerate(study_guide_content, 1):
+        toc_p = doc.add_paragraph()
+        toc_p.add_run(f"{idx}. {section_data['title']}")
+        toc_p.style = 'List Number'
+    
+    doc.add_page_break()
+    
+    # Add content sections
+    for section_data in study_guide_content:
+        doc.add_heading(section_data['title'], level=1)
+        add_formatted_text_to_document(doc, section_data['content'])
+        doc.add_paragraph()  # Add spacing between sections
+
+    # Save the document
+    safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '_')).rstrip()
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    mode_suffix = "extreme" if extreme_mode else "fast"
+    filename = f"StudyGuide_{safe_topic}_{style}_{mode_suffix}_{timestamp}.docx"
+    
+    os.makedirs(GENERATED_FILES_DIR, exist_ok=True)
+    file_path = os.path.join(GENERATED_FILES_DIR, filename)
+    doc.save(file_path)
+    return file_path
+
 def add_formatted_text_to_document(doc, text):
     """
-    Parses a custom-formatted string and adds it to a Word document,
-    preserving formatting like bold, italics, underline, color, and alignment.
+    Parses both markdown and custom-formatted text and adds it to a Word document,
+    preserving formatting like bold, italics, underline, color, alignment, headers, and lists.
+    Now supports both markdown syntax and custom formatting tags.
     """
     current_alignment = WD_ALIGN_PARAGRAPH.LEFT
-
+    
+    # First check if the text contains markdown patterns
+    has_markdown = any([
+        '**' in text,  # Bold
+        re.search(r'(?<!\*)\*(?!\*)', text),  # Italic (single asterisk not part of **)
+        '`' in text,   # Code
+        re.search(r'^#+\s', text, re.MULTILINE),  # Headers
+        re.search(r'^\s*[-*+]\s', text, re.MULTILINE),  # Lists
+        re.search(r'^\s*\d+\.\s', text, re.MULTILINE),  # Numbered lists
+        '___' in text or '---' in text or '***' in text,  # Horizontal rules
+    ])
+    
+    # If contains markdown, use the new markdown parser
+    if has_markdown:
+        parse_markdown_content_to_word(doc, text)
+        return
+    
+    # Otherwise, use the existing custom formatting tag parser for backward compatibility
     for line in text.splitlines():
         # Skip image tags and empty lines
         if line.startswith('[image') or not line.strip():
@@ -350,8 +850,9 @@ def render_presentation_mode(dbms):
                 # Enhanced prompt: include formatting and centering instructions
                 prompt = (
                     f"Write detailed speaker notes and bullet points for a slide titled '{slide_info['title']}'. "
-                    f"Use '[align=center]' tags to center the slide title and bullet points prefixed with '- '. "
-                    f"Include font size tags (e.g., '[font size=18]') where appropriate. "
+                    f"Use markdown formatting: **bold**, *italic*, and bullet points with '- '. "
+                    f"Include '[align=center]' tags to center the slide title. "
+                    f"Include font size tags (e.g., '[font size=18]') where appropriate for slide display. "
                     f"Points: {', '.join(slide_info['points'])}."
                 )
                 messages = [
@@ -400,21 +901,481 @@ def render_presentation_mode(dbms):
             init_presentation_state(force_reset=True)
             st.rerun()
 
-def render_study_guide_mode():
-    st.header("📚 Study Guide Generator")
-    st.info("This feature is coming soon! It will help you create detailed study guides from your documents.")
+def render_study_guide_mode(dbms):
+    st.header("Study Guide Generator")
+    init_study_guide_state()
+
+    # STEP 1: Get topic, style, and generate outline
+    if st.session_state.study_guide_step == "initial":
+        st.subheader("Configure Your Study Guide")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            topic = st.text_input("Enter the topic for your study guide:", 
+                                placeholder="e.g., Photosynthesis, World War II, Python Programming")
+        
+        with col2:
+            style = st.selectbox("Select Study Guide Style", 
+                               ["comprehensive", "summary", "outline", "flashcard_prep", "exam_focused"],
+                               format_func=lambda x: x.replace('_', ' ').title(),
+                               key="study_guide_style_select")
+        
+        # Style descriptions
+        style_descriptions = {
+            "comprehensive": "📖 Detailed explanations with examples and practice questions",
+            "summary": "📝 Concise key points and essential information",
+            "outline": "📋 Structured hierarchical organization of topics", 
+            "flashcard_prep": "🃏 Optimized for creating flashcards with clear Q&A format",
+            "exam_focused": "🎯 Emphasis on likely test questions and critical concepts"
+        }
+        st.info(style_descriptions[style])
+        
+        # Extreme Mode checkbox
+        st.markdown("### ⚙️ Generation Options")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            extreme_mode = st.checkbox(
+                "🚀 Enable Extreme Mode", 
+                value=False,
+                key="extreme_mode_checkbox",
+                help="⚠️ Extreme Mode uses advanced AI processing for maximum detail and quality but may take up to 10 minutes to generate. Unchecked uses fast mode (IDX) which generates content in under 2 minutes."
+            )
+        
+        with col2:
+            page_count = st.number_input(
+                "Set Target Page Count", 
+                min_value=-1, 
+                max_value=50, 
+                value=-1,
+                step=1,
+                key="page_count_input",
+                help="❓ Set target page count for the study guide. Use -1 for automatic length (AI decides optimal length). Range: 1-50 pages. Higher page counts will take longer to generate."
+            )
+        
+        # Show estimates based on page count
+        if page_count == -1:
+            st.info("📝 **Auto Length**: AI will determine optimal study guide length based on topic complexity.")
+        elif page_count <= 5:
+            st.success(f"📄 **Short Guide**: ~{page_count} pages • Quick generation • Concise content")
+        elif page_count <= 15:
+            st.info(f"📄 **Medium Guide**: ~{page_count} pages • Moderate generation time • Balanced detail")
+        elif page_count <= 30:
+            st.warning(f"📄 **Long Guide**: ~{page_count} pages • Extended generation time • Comprehensive detail")
+        else:
+            st.error(f"📄 **Very Long Guide**: ~{page_count} pages • Very long generation time • Extensive detail")
+        
+        # Show time estimates
+        if extreme_mode:
+            if page_count == -1:
+                time_est = "5-15 minutes"
+            elif page_count <= 10:
+                time_est = f"{3 + page_count//2}-{5 + page_count} minutes"
+            else:
+                time_est = f"{5 + page_count//2}-{10 + page_count} minutes"
+            st.warning(f"⚠️ **Extreme Mode Enabled**: Generation may take {time_est} but will produce the highest quality, most comprehensive content.")
+        else:
+            if page_count == -1:
+                time_est = "1-3 minutes"
+            elif page_count <= 15:
+                time_est = f"{1 + page_count//5}-{2 + page_count//3} minutes"
+            else:
+                time_est = f"{3 + page_count//5}-{5 + page_count//3} minutes"
+            st.success(f"⚡ **Fast Mode**: Using optimized IDX processing for quick generation (Est. {time_est}).")
+        
+        if st.button("Generate Study Guide Outline") and topic:
+            st.session_state.study_guide_topic = topic
+            st.session_state.study_guide_style = style
+            st.session_state.study_guide_extreme_mode = extreme_mode
+            st.session_state.study_guide_page_count = page_count
+            
+            generation_mode = "Normal" if extreme_mode else "Idx"
+            time_estimate = "5-10 minutes" if extreme_mode else "under 45 seconds per page"
+            
+            with st.spinner(f"Analyzing your documents and creating a study guide outline... (Estimated time: {time_estimate})"):
+                context = get_context_for_topic(dbms, topic)
+                style_instruction = get_study_guide_style_prompt(style)
+                
+                # Add page count guidance to outline generation
+                if page_count == -1:
+                    length_guidance = "Create an outline with natural section count based on topic complexity."
+                else:
+                    recommended_sections = max(3, min(page_count // 2, 12))  # 2-12 sections based on page count
+                    length_guidance = f"Create an outline with approximately {recommended_sections} main sections to fit ~{page_count} pages."
+                
+                prompt = (f"Create a detailed outline for a study guide on '{topic}'. "
+                         f"{style_instruction} "
+                         f"{length_guidance} "
+                         f"Format the outline in markdown with main sections starting with '## ' and subtopics with '- '. "
+                         f"Use proper markdown formatting throughout. "
+                         f"Base the outline on the following information from my documents:\n\n{context}")
+                
+                outline_messages: list[ChatCompletionMessageParam] = [
+                    {"role": "system", "content": "You are an educational AI that creates comprehensive study guide outlines."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                outline = "".join(list(openai_api_call(outline_messages, generation_mode)))
+                st.session_state.study_guide_outline = outline
+                st.session_state.study_guide_step = "outline_generated"
+                st.rerun()
+
+    # STEP 2: Review and edit outline
+    elif st.session_state.study_guide_step == "outline_generated":
+        st.subheader("Step 2: Review & Edit Outline")
+        
+        # Show current settings
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"📚 Style: {st.session_state.study_guide_style.replace('_', ' ').title()}")
+        with col2:
+            mode_display = "🚀 Extreme Mode" if st.session_state.study_guide_extreme_mode else "⚡ Fast Mode"
+            st.info(f"⚙️ {mode_display}")
+        with col3:
+            page_count = st.session_state.get('study_guide_page_count', -1)
+            page_display = "Auto Length" if page_count == -1 else f"{page_count} Pages"
+            st.info(f"📄 Target: {page_display}")
+        
+        outline = st.text_area("Edit the study guide outline:", 
+                             value=st.session_state.study_guide_outline, 
+                             height=400,
+                             help="Use ## for main sections and - for subtopics")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬅️ Back to Topic Selection"):
+                st.session_state.study_guide_step = "initial"
+                st.rerun()
+        
+        with col2:
+            if st.button("Generate Content ➡️"):
+                st.session_state.study_guide_outline = outline
+                parsed = parse_outline_to_sections(outline)
+                st.session_state.parsed_sections = parsed
+                st.session_state.study_guide_step = "generating_content"
+                st.rerun()
+
+    # STEP 3: Auto-generate all section content
+    elif st.session_state.study_guide_step == "generating_content":
+        parsed = st.session_state.parsed_sections
+        total = len(parsed)
+        
+        # Determine generation mode and estimates
+        is_extreme_mode = st.session_state.get('study_guide_extreme_mode', False)
+        generation_mode = "Normal" if is_extreme_mode else "Idx"
+        mode_display = "🚀 Extreme Mode" if is_extreme_mode else "⚡ Fast Mode"
+        time_estimate = "5-10 minutes" if is_extreme_mode else "under 2 minutes"
+        
+        st.subheader(f"Step 3: Generating {total} sections...")
+        
+        # Show generation info
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"📚 {st.session_state.study_guide_style.replace('_', ' ').title()} style")
+        with col2:
+            st.info(f"⚙️ {mode_display} • Est. {time_estimate}")
+        with col3:
+            page_count = st.session_state.get('study_guide_page_count', -1)
+            if page_count == -1:
+                st.info("📄 Auto Length")
+            else:
+                st.info(f"📄 ~{page_count} pages")
+        
+        if is_extreme_mode:
+            st.warning("🚀 **Extreme Mode Active**: Using advanced AI processing for maximum detail. Please be patient as this may take several minutes.")
+        else:
+            st.success("⚡ **Fast Mode Active**: Using optimized processing for quick generation.")
+        
+        progress = st.progress(0)
+        generated = []
+        
+        with st.spinner(f"Generating detailed study guide content using {mode_display}..."):
+            context = get_context_for_topic(dbms, st.session_state.study_guide_topic)
+            style_instruction = get_study_guide_style_prompt(st.session_state.study_guide_style)
+            page_count = st.session_state.get('study_guide_page_count', -1)
+            page_count_instruction = get_page_count_instructions(page_count, len(parsed))
+            
+            for i, section_info in enumerate(parsed):
+                # Enhanced prompt for study guide content
+                markdown_instructions = get_markdown_formatting_instructions()
+                prompt = (
+                    f"Write comprehensive study guide content for the section titled '{section_info['title']}'. "
+                    f"{style_instruction} "
+                    f"Include the following subtopics: {', '.join(section_info['subsections'])}. "
+                    f"{markdown_instructions} "
+                    f"{page_count_instruction} "
+                    f"Include definitions, explanations, examples, and key points. "
+                    f"Add practice questions or review items where appropriate. "
+                    f"Structure your response with clear headers and organized sections. "
+                    f"Base your content on this context: {context[:2000]}..."  # Limit context to avoid token limits
+                )
+                
+                messages = [
+                    {"role": "system", "content": "You are an expert educator creating detailed study guide content."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                content = "".join(openai_api_call(messages, generation_mode))
+                generated.append({"title": section_info['title'], "content": content})
+                progress.progress(int((i+1)/total * 100))
+        
+        # Store generated content and move to review step
+        st.session_state.study_guide_content = generated
+        st.session_state.study_guide_step = "content_generated"
+        
+        # Clean up temporary state
+        st.session_state.pop('parsed_sections', None)
+        st.rerun()
+
+    # STEP 4: Review & Edit Final Content
+    elif st.session_state.study_guide_step == "content_generated":
+        st.subheader("Step 4: Review & Edit Content")
+        
+        # Show generation info
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"📚 Topic: {st.session_state.study_guide_topic}")
+        with col2:
+            style_display = st.session_state.study_guide_style.replace('_', ' ').title()
+            mode_display = "🚀 Extreme Mode" if st.session_state.get('study_guide_extreme_mode', False) else "⚡ Fast Mode"
+            st.info(f"⚙️ {style_display} • {mode_display}")
+        with col3:
+            page_count = st.session_state.get('study_guide_page_count', -1)
+            if page_count == -1:
+                st.info("📄 Auto Length")
+            else:
+                st.info(f"📄 ~{page_count} pages")
+        
+        # Add tabs for easier navigation through sections
+        if len(st.session_state.study_guide_content) > 1:
+            section_tabs = st.tabs([f"Section {i+1}: {section['title'][:20]}..." if len(section['title']) > 20 
+                                  else f"Section {i+1}: {section['title']}" 
+                                  for i, section in enumerate(st.session_state.study_guide_content)])
+            
+            new_content = []
+            for idx, (tab, section) in enumerate(zip(section_tabs, st.session_state.study_guide_content)):
+                with tab:
+                    st.markdown(f"**{section['title']}**")
+                    content = st.text_area(
+                        f"Content for {section['title']}", 
+                        value=section['content'], 
+                        key=f"section_{idx}_content", 
+                        height=300
+                    )
+                    new_content.append({"title": section['title'], "content": content})
+        else:
+            # Single section - no tabs needed
+            section = st.session_state.study_guide_content[0]
+            st.markdown(f"**{section['title']}**")
+            content = st.text_area(
+                f"Content for {section['title']}", 
+                value=section['content'], 
+                key="section_0_content", 
+                height=400
+            )
+            new_content = [{"title": section['title'], "content": content}]
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("⬅️ Back to Outline"):
+                st.session_state.study_guide_step = "outline_generated"
+                st.rerun()
+        
+        with col2:
+            if st.button("Generate Study Guide 📚"):
+                st.session_state.study_guide_content = new_content
+                st.session_state.study_guide_step = "export"
+                st.rerun()
+
+    # STEP 5: Export Study Guide
+    elif st.session_state.study_guide_step == "export":
+        st.subheader("📥 Download Your Study Guide")
+        
+        topic = st.session_state.study_guide_topic
+        style = st.session_state.study_guide_style
+        mode_display = "🚀 Extreme Mode" if st.session_state.get('study_guide_extreme_mode', False) else "⚡ Fast Mode"
+        
+        # Show final summary
+        st.success(f"✅ **Study Guide Complete!** Generated using {mode_display}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📄 Word Document")
+            st.write("Complete study guide with formatting and table of contents")
+            
+            try:
+                doc_path = create_study_guide_from_content(
+                    st.session_state.study_guide_content, 
+                    topic, 
+                    style,
+                    st.session_state.get('study_guide_extreme_mode', False)
+                )
+                with open(doc_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Study Guide (.docx)", 
+                        f, 
+                        file_name=os.path.basename(doc_path), 
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"Error creating document: {str(e)}")
+        
+        with col2:
+            st.markdown("### 📋 Text Format")
+            st.write("Plain text version for easy copying")
+            
+            # Create text version with generation mode info
+            text_content = f"STUDY GUIDE: {topic.upper()}\n"
+            text_content += f"Generated: {datetime.datetime.now().strftime('%B %d, %Y')}\n"
+            text_content += f"Style: {style.replace('_', ' ').title()}\n"
+            text_content += f"Generation Mode: {mode_display}\n"
+            text_content += "=" * 50 + "\n\n"
+            
+            for section in st.session_state.study_guide_content:
+                text_content += f"{section['title']}\n"
+                text_content += "-" * len(section['title']) + "\n"
+                # Remove formatting tags for plain text
+                clean_content = re.sub(r'\[/?(font|align)[^]]*\]', '', section['content'])
+                text_content += clean_content + "\n\n"
+            
+            st.download_button(
+                "⬇️ Download as Text (.txt)",
+                text_content.encode('utf-8'),
+                file_name=f"StudyGuide_{topic.replace(' ', '_')}_{style}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📚 Create Another Study Guide"):
+                init_study_guide_state(force_reset=True)
+                st.rerun()
+        
+        with col2:
+            if st.button("📝 Create Presentation from This Topic"):
+                # Switch to presentation mode with the same topic
+                init_presentation_state(force_reset=True)
+                st.session_state.presentation_topic = topic
+                st.session_state.mixup_mode_selector = "Presentation"  # Switch the radio button
+                st.rerun()
 
 def render_flashcard_mode():
     st.header("📇 Q&A Flashcard Generator")
-    st.info("This feature is coming soon! It will extract question-answer pairs from your files to help you study.")
+    st.info("⚠️ **Note:** This is a simplified implementation. Full flashcard functionality coming soon!")
+    
+    # Simple flashcard generator
+    st.subheader("Quick Flashcard Generator")
+    
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        topic = st.text_input("Enter a topic for flashcard generation:", 
+                            placeholder="e.g., Biology Terms, History Dates, Math Formulas")
+    
+    with col2:
+        num_cards = st.selectbox("Number of flashcards:", [5, 10, 15, 20], index=1)
+    
+    if st.button("Generate Flashcards") and topic:
+        with st.spinner(f"Generating {num_cards} flashcards for {topic}..."):
+            # Simple prompt for flashcard generation
+            prompt = (f"Create {num_cards} educational flashcards about {topic}. "
+                     f"Format each flashcard as 'Q: [question]' followed by 'A: [answer]' on the next line. "
+                     f"Make questions clear and concise, and answers accurate and helpful for studying.")
+            
+            messages: list[ChatCompletionMessageParam] = [
+                {"role": "system", "content": "You are an educational AI that creates study flashcards."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            flashcard_content = "".join(openai_api_call(messages, "Idx"))
+            
+            # Parse and display flashcards
+            lines = flashcard_content.split('\n')
+            current_question = ""
+            current_answer = ""
+            flashcards = []
+            
+            for line in lines:
+                line = line.strip()
+                if line.startswith('Q:'):
+                    if current_question and current_answer:
+                        flashcards.append({'question': current_question, 'answer': current_answer})
+                    current_question = line[2:].strip()
+                    current_answer = ""
+                elif line.startswith('A:'):
+                    current_answer = line[2:].strip()
+                elif current_answer and line:  # Continue answer on next lines
+                    current_answer += " " + line
+            
+            # Add the last flashcard
+            if current_question and current_answer:
+                flashcards.append({'question': current_question, 'answer': current_answer})
+            
+            # Display flashcards
+            if flashcards:
+                st.success(f"Generated {len(flashcards)} flashcards!")
+                
+                # Create tabs for each flashcard
+                if len(flashcards) > 1:
+                    flashcard_tabs = st.tabs([f"Card {i+1}" for i in range(len(flashcards))])
+                    
+                    for i, (tab, card) in enumerate(zip(flashcard_tabs, flashcards)):
+                        with tab:
+                            st.markdown(f"### 🃏 Flashcard {i+1}")
+                            
+                            # Create expandable sections for question and answer
+                            with st.expander("❓ Question", expanded=True):
+                                st.write(card['question'])
+                            
+                            with st.expander("✅ Answer", expanded=False):
+                                st.write(card['answer'])
+                else:
+                    # Single flashcard
+                    card = flashcards[0]
+                    st.markdown("### 🃏 Flashcard")
+                    
+                    with st.expander("❓ Question", expanded=True):
+                        st.write(card['question'])
+                    
+                    with st.expander("✅ Answer", expanded=False):
+                        st.write(card['answer'])
+                
+                # Export options
+                st.markdown("---")
+                st.subheader("📥 Export Flashcards")
+                
+                # Create text format for download
+                flashcard_text = f"FLASHCARDS: {topic.upper()}\n"
+                flashcard_text += f"Generated: {datetime.datetime.now().strftime('%B %d, %Y')}\n"
+                flashcard_text += "=" * 50 + "\n\n"
+                
+                for i, card in enumerate(flashcards, 1):
+                    flashcard_text += f"CARD {i}\n"
+                    flashcard_text += f"Q: {card['question']}\n"
+                    flashcard_text += f"A: {card['answer']}\n\n"
+                
+                st.download_button(
+                    "⬇️ Download Flashcards (.txt)",
+                    flashcard_text.encode('utf-8'),
+                    file_name=f"Flashcards_{topic.replace(' ', '_')}.txt",
+                    mime="text/plain"
+                )
+            else:
+                st.error("Could not generate flashcards. Please try again with a different topic.")
+    
+    st.markdown("---")
+    st.info("💡 **Tip:** For more advanced flashcard features, consider using the Study Guide mode and then creating flashcards from the generated content!")
 
 def mixup_page():
-    st.title('Arcana Mixup')
-    st.write("Your intelligent assistant for creating documents, presentations, and study materials.")
+    st.title("Arcana Mixup")
+    st.write("Create presentations and study guides from your indexed files.")
 
     # Check if the database is uninitialized or has no indexed entries.
     if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS) or st.session_state.dbms.is_empty():
-        st.info("No indexed files found. Content will be generated from general knowledge. To use your own documents as context, please go to the 'Files' page and index them first.")
+        st.info("No files indexed.")
         # If the dbms object doesn't exist at all, create an empty one to prevent errors.
         if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS):
             st.session_state.dbms = FiberDBMS()
@@ -423,7 +1384,7 @@ def mixup_page():
 
     mode = st.radio(
         "Choose a generation mode:",
-        ["Presentation", "Study Guide", "Q&A Flashcards"],
+        ["Presentation", "Study Guide"],
         key='mixup_mode_selector',
         horizontal=True,
     )
@@ -433,9 +1394,5 @@ def mixup_page():
     if mode == "Presentation":
         render_presentation_mode(dbms)
     elif mode == "Study Guide":
-        render_study_guide_mode()
-    elif mode == "Q&A Flashcards":
-        render_flashcard_mode()
+        render_study_guide_mode(dbms)
 
-if __name__ == "__main__":
-    mixup_page()

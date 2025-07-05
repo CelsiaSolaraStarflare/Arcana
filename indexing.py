@@ -5,6 +5,9 @@ from pptx import Presentation
 import chardet
 from fiber import FiberDBMS
 import nltk
+
+# Ensure NLTK data is available before importing NLTK functions
+import nltk_setup
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from PyPDF2 import PdfReader
