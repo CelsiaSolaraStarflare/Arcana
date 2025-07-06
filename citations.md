@@ -7,7 +7,7 @@ This document provides a comprehensive list of citations for the academic materi
 The following materials form the basis of the Grade 9 curriculum content indexed in the database.
 
 ### General Lectures
-- **Source:** Academic Department, Grades 9 & 10, Shanghai American School (SHSID).
+- **Source:** Academic Department, Grades 9 & 10, Shanghai High School International Division (SHSID).
 - **Content:** All lectures and in-class materials.
 
 ### Subject-Specific Textbooks
