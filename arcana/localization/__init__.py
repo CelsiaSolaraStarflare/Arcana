@@ -1,0 +1,1 @@
+# Localization module - Translation and language support
