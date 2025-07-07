@@ -27,8 +27,7 @@ def initialize_app():
         layout="wide"
     )
 
-    # 2. Download NLTK data if not present
-    @st.cache_resource
+    # 2. Download NLTK data if not present (basic version without caching)
     def download_nltk_data():
         try:
             nltk.data.find('tokenizers/punkt')
@@ -40,7 +39,10 @@ def initialize_app():
             nltk.download("stopwords")
         return True
 
-    download_nltk_data()
+    # Only download if not already done in session
+    if 'nltk_data_downloaded' not in st.session_state:
+        download_nltk_data()
+        st.session_state.nltk_data_downloaded = True
 
     # 3. Ensure necessary directories exist
     os.makedirs(CACHE_DIR, exist_ok=True)
