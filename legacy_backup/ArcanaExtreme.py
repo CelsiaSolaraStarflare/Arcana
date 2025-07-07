@@ -180,7 +180,7 @@ if not st.session_state.get("boot_shown", False):
     show_boot_animation()
     time.sleep(2.0)
     st.session_state.boot_shown = True
-    st.experimental_rerun()
+    st.rerun()
 
 # ------------------- Page Transition Fade-In -------------------
 
@@ -262,7 +262,7 @@ def render_icon_navigation():
                 if st.button(page_icons[page_name], key=f"icon_{page_name}"):
                     st.session_state.selected_page = page_name
                     st.session_state.show_icon_menu = False  # hide menu
-                    st.experimental_rerun()
+                    st.rerun()
 
                 # Tagline label underneath the icon
                 st.markdown(
@@ -289,7 +289,7 @@ else:
     with back_col:
         if st.button("← Menu", key="btn_back_to_menu"):
             st.session_state.show_icon_menu = True
-            st.experimental_rerun()
+            st.rerun()
 
     # Render the selected page content
     pages[st.session_state.selected_page]()

@@ -91,19 +91,19 @@ advanced_pages = ["Mixup", "Editor", "Long Response"]
 for page in main_pages:
     if st.sidebar.button(page, key=f"main_btn_{page}"):
         st.session_state.selected_page = page
-        st.experimental_rerun()
+        st.rerun()
 
 # Display advanced tools in an expander
 with st.sidebar.expander("Advanced Tools"):
     for page in advanced_pages:
         if st.button(page, key=f"adv_btn_{page}"):
             st.session_state.selected_page = page
-            st.experimental_rerun()
+            st.rerun()
 
 # Display settings button separately at the bottom
 if st.sidebar.button("Settings", key="settings_btn"):
     st.session_state.selected_page = "Settings"
-    st.experimental_rerun()
+    st.rerun()
 
 # --- Page Functions ---
 
