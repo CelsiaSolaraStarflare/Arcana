@@ -90,10 +90,11 @@ if __name__ == "__main__":
         print("   • Target page input with help tooltip")
         print("   • Dynamic time estimates based on page count")
         print("   • Content length guidance for AI prompts")
-        print("   • Smart word count calculation (275 words/page)")
+        print("   • Smart word count calculation (180 words/page for study guides)")
         print("   • Automatic section count recommendation")
         print("   • Page count display throughout workflow")
         print("   • Markdown formatting instructions for better output")
+        print("   • Study guide format optimization (headers, bullets, structure)")
         
     except Exception as e:
         print(f"❌ Test failed: {e}")

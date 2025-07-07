@@ -1,0 +1,1 @@
+# Core module - Main application logic
