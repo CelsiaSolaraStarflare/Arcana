@@ -39,8 +39,7 @@ def initialize_app():
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
 
-    # 3. Download NLTK data if not present
-    @st.cache_resource
+    # 3. Download NLTK data if not present (basic version without caching)
     def download_nltk_data():
         try:
             nltk.data.find('tokenizers/punkt')
@@ -52,7 +51,10 @@ def initialize_app():
             nltk.download("stopwords")
         return True
 
-    download_nltk_data()
+    # Only download if not already done in session
+    if 'nltk_data_downloaded' not in st.session_state:
+        download_nltk_data()
+        st.session_state.nltk_data_downloaded = True
 
     # 4. Ensure necessary directories exist
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -178,7 +180,7 @@ if not st.session_state.get("boot_shown", False):
     show_boot_animation()
     time.sleep(2.0)
     st.session_state.boot_shown = True
-    st.rerun()
+    st.experimental_rerun()
 
 # ------------------- Page Transition Fade-In -------------------
 
@@ -260,7 +262,7 @@ def render_icon_navigation():
                 if st.button(page_icons[page_name], key=f"icon_{page_name}"):
                     st.session_state.selected_page = page_name
                     st.session_state.show_icon_menu = False  # hide menu
-                    st.rerun()
+                    st.experimental_rerun()
 
                 # Tagline label underneath the icon
                 st.markdown(
@@ -287,7 +289,7 @@ else:
     with back_col:
         if st.button("← Menu", key="btn_back_to_menu"):
             st.session_state.show_icon_menu = True
-            st.rerun()
+            st.experimental_rerun()
 
     # Render the selected page content
     pages[st.session_state.selected_page]()

@@ -38,8 +38,7 @@ def initialize_app():
         layout="wide"
     )
 
-    # 2. Download NLTK data if not present
-    @st.cache_resource
+    # 2. Download NLTK data if not present (basic version without caching)
     def download_nltk_data():
         try:
             nltk.data.find('tokenizers/punkt')
@@ -51,7 +50,10 @@ def initialize_app():
             nltk.download("stopwords")
         return True
 
-    download_nltk_data()
+    # Only download if not already done in session
+    if 'nltk_data_downloaded' not in st.session_state:
+        download_nltk_data()
+        st.session_state.nltk_data_downloaded = True
 
     # 3. Ensure necessary directories exist
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -89,19 +91,19 @@ advanced_pages = ["Mixup", "Editor", "Long Response"]
 for page in main_pages:
     if st.sidebar.button(page, key=f"main_btn_{page}"):
         st.session_state.selected_page = page
-        st.rerun()
+        st.experimental_rerun()
 
 # Display advanced tools in an expander
 with st.sidebar.expander("Advanced Tools"):
     for page in advanced_pages:
         if st.button(page, key=f"adv_btn_{page}"):
             st.session_state.selected_page = page
-            st.rerun()
+            st.experimental_rerun()
 
 # Display settings button separately at the bottom
 if st.sidebar.button("Settings", key="settings_btn"):
     st.session_state.selected_page = "Settings"
-    st.rerun()
+    st.experimental_rerun()
 
 # --- Page Functions ---
 
