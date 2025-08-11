@@ -6,6 +6,8 @@ import jieba  # For Chinese word segmentation
 import csv
 import ast  # For safely evaluating string representations of Python literals
 
+from arcana.core.config import INDEX_FILE
+
 class FiberDBMS:
     """
     A simple in-memory, file-backed search engine.
@@ -159,8 +161,8 @@ def main():
     A simple command-line interface for testing the FiberDBMS search functionality.
     """
     dbms = FiberDBMS()
-    
-    db_file = "arcana_index.csv"
+
+    db_file = INDEX_FILE
     # Load or create the database
     dbms.load_or_create(db_file)
 

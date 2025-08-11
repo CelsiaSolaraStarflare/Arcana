@@ -22,9 +22,19 @@ The codebase has been completely refactored for better organization and maintain
 📦 Arcana/
 ├── 🎯 app.py                    # Main Streamlit application
 ├── 🚀 run.sh                    # Quick start script
+├── 🛠️ scripts/                 # Utility and setup scripts
+│   ├── build_and_install.py
+│   ├── main.py
+│   ├── mixup.py
+│   └── nltk_setup.py
+├── 📂 data/                    # Application data and caches
+│   ├── IDXDB/                  # Indexed document cache
+│   ├── arcana_index.csv        # Search index
+│   ├── temp_database.csv
+│   └── temp_database.txt
 ├── 📋 requirements.txt          # Dependencies
 ├── ⚙️ setup.py                  # Package setup
-├── 📖 README.md                 # This file
+├── 📖 README.md                 # Project documentation
 ├── 🗃️ legacy_backup/            # Original files (backup)
 └── 📁 arcana/                   # Main package
     ├── 🏗️ core/                 # Core application logic
