@@ -6,6 +6,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from arcana.utils.response import openai_api_call
 from arcana.utils.fiber import FiberDBMS
+from arcana.core.config import INDEX_FILE
 from openai.types.chat import ChatCompletionMessageParam
 
 
@@ -64,10 +65,10 @@ def flashcards_page():
     if 'dbms' in st.session_state and isinstance(st.session_state.dbms, FiberDBMS) and not st.session_state.dbms.is_empty():
         dbms = st.session_state.dbms
     else:
-        # Try to load from arcana_index.csv
+        # Try to load from the index file on disk
         try:
             import os
-            index_file = "arcana_index.csv"
+            index_file = INDEX_FILE
             if os.path.exists(index_file):
                 dbms = FiberDBMS()
                 dbms.load_from_file(index_file)

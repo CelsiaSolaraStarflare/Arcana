@@ -37,7 +37,7 @@ Source = "https://github.com/arcana/streamlit-theta"
 
 [tool.setuptools.packages.find]
 include = ["streamlit_theta*"]
-exclude = ["IDXDB*", "__pycache__*", "generated*", "plugin*", "*.pyc"]
+exclude = ["data*", "scripts*", "__pycache__*", "generated*", "plugin*", "*.pyc"]
 
 [tool.setuptools.package-data]
 streamlit_theta = ["*.py"] 

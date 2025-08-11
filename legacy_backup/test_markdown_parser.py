@@ -8,7 +8,10 @@ import sys
 sys.path.append(os.path.dirname(__file__))
 
 from docx import Document
-from mixup import parse_markdown_content_to_word, parse_markdown_to_word_runs
+from scripts.mixup import (
+    parse_markdown_content_to_word,
+    parse_markdown_to_word_runs,
+)
 
 def test_markdown_parser():
     """Test the markdown parser with sample content."""

@@ -8,7 +8,7 @@ import arcana.utils.nltk_setup
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from arcana.utils.fiber import FiberDBMS
-from arcana.core.config import INDEX_FILE
+from arcana.core.config import INDEX_FILE, CACHE_DIR
 import os
 import json
 import datetime
@@ -430,8 +430,8 @@ def chatbot_page():
                 with st.spinner(f"🔍 Processing {uploaded_file.name}..."):
                     file_content = extract_content_from_file(uploaded_file)
                     if file_content:
-                        # Save the uploaded file to IDXDB/Uploads directory
-                        uploads_dir = os.path.join(os.path.dirname(__file__), "IDXDB", "Uploads")
+                        # Save the uploaded file to CACHE_DIR/Uploads directory
+                        uploads_dir = os.path.join(CACHE_DIR, "Uploads")
                         os.makedirs(uploads_dir, exist_ok=True)
                         
                         try:
@@ -446,9 +446,9 @@ def chatbot_page():
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(file_content)
                             
-                            st.info(f"💾 Saved to IDXDB/Uploads: {uploaded_file.name} + extracted text")
+                            st.info(f"💾 Saved to {uploads_dir}: {uploaded_file.name} + extracted text")
                         except Exception as e:
-                            st.warning(f"Could not save file to IDXDB/Uploads: {e}")
+                            st.warning(f"Could not save file to {uploads_dir}: {e}")
                             # Continue with processing even if file saving fails
                         
                         # Index the new file content into the database
