@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaExtreme%201.0Beta2-black)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaExtreme%201.0Beta3-black)
 ![Development Status](https://img.shields.io/badge/status-Beta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
@@ -8,7 +8,7 @@
 
 # 🌌 Welcome to Arcana Extreme  
 ✨ By the Indexademics Team | Powered by StandardCAS™
-[*Version 1.0 Beta 02 (2025-07-02)*]
+[*Version 1.0 Beta 03 (2025-07-04)*]
 
 --- 
 ## 📚 Table of Contents
@@ -42,7 +42,7 @@ ArcanaLTE Æ151
 ✔ Document-based database searching
 ✔ ArcanaMixup for PPT and Doc generation
 
-ArcanaExtreme ß102 (Current)
+ArcanaExtreme ß103 (Current)
 ➕ Contour Design
 ➕ All features of ArcanaLTE
 ➕ Peer Advisor Journalism suite
@@ -166,6 +166,19 @@ Arcana Extreme is a sophisticated Streamlit application that transforms your doc
 - **Visual Slide Editor**: PowerPoint/Keynote-style editor with streamlit-theta
 - **Document Export**: Export to both PowerPoint and Word formats
 
+### 📚 **Study Guide Generator** *(NEW!)*
+- **Multiple Study Styles**: Comprehensive, summary, outline, flashcard-prep, and exam-focused modes
+- **Intelligent Outline Generation**: AI creates structured study guide outlines from your documents
+- **Section-by-Section Content**: Detailed explanations, examples, and practice questions
+- **Formatted Export**: Professional Word documents with table of contents and formatting
+- **Cross-Platform Integration**: Seamlessly switch between study guides and presentations
+
+### 🃏 **Q&A Flashcard Generator** *(NEW!)*
+- **Quick Flashcard Creation**: Generate study flashcards from any topic
+- **Interactive Review**: Expandable question/answer format for effective studying
+- **Bulk Generation**: Create 5-20 flashcards at once
+- **Export Options**: Download as text files for external flashcard apps
+
 ### 🎯 **Advanced Analytics**
 - **Long-form Analysis**: Deep document analysis with Qwen models
 - **Multiple Analysis Modes**: Summary, takeaways, pros/cons, simplified explanations
@@ -254,6 +267,20 @@ slides = theta_slide_editor(
 2. **AI Generation**: Let AI create an outline and content
 3. **Visual Editing**: Use our Theta editor to customize slides visually
 4. **Export**: Download as PowerPoint or Word document
+
+### Study Guide Creation *(NEW!)*
+1. **Select Topic & Style**: Choose your study topic and preferred style (comprehensive, summary, outline, flashcard-prep, or exam-focused)
+2. **Review Outline**: AI generates a structured outline that you can edit
+3. **Content Generation**: AI creates detailed content for each section based on your documents
+4. **Edit & Customize**: Review and modify content in tabbed interface
+5. **Export Options**: Download as formatted Word document or plain text
+
+### Flashcard Generation *(NEW!)*
+1. **Enter Topic**: Specify what you want to create flashcards about
+2. **Set Quantity**: Choose 5-20 flashcards
+3. **AI Generation**: AI creates question-answer pairs
+4. **Interactive Review**: Study with expandable Q&A format
+5. **Export**: Download as text file for use in flashcard apps
 
 ## 🏗️ Architecture
 

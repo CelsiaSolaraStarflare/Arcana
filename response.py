@@ -15,7 +15,7 @@ def openai_api_call(messages: Iterable[ChatCompletionMessageParam], mode: str = 
     This function is a generator that yields the content chunks.
     """
     model_map = {
-        'Normal': 'qwen-turbo',
+        'Normal': 'qwen-plus',
         'Math': 'llama-4-maverick-17b-128e-instruct',
         'Long Text': 'qwen-long',
         'Idx': 'qwen-turbo'

@@ -38,20 +38,8 @@ def initialize_app():
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
 
-    # 3. Download NLTK data if not present
-    @st.cache_resource
-    def download_nltk_data():
-        try:
-            nltk.data.find('tokenizers/punkt')
-        except LookupError:
-            nltk.download("punkt")
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download("stopwords")
-        return True
-
-    download_nltk_data()
+    # 3. Ensure NLTK data is available
+    import nltk_setup  # This will automatically download required NLTK data
 
     # 4. Ensure necessary directories exist
     os.makedirs(CACHE_DIR, exist_ok=True)
