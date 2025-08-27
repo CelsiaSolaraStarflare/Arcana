@@ -1,0 +1,18 @@
+openai
+numpy
+pandas
+python-docx
+python-pptx
+chardet
+jieba
+nltk
+PyPDF2
+uuid
+streamlit-reveal-slides
+streamlit
+streamlit-webrtc
+av
+dashscope>=1.20.0
+
+# Optional dependencies for enhanced features
+# streamlit-theta  # Uncomment for visual PPT editor in Mixup

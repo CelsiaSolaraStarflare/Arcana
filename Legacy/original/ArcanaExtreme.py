@@ -7,16 +7,16 @@ import os
 import time
 from dotenv import load_dotenv
 
-from arcana.finder import files_page
-from arcana.chatbot import chatbot_page
-from arcana.settings import settings_page
-from arcana.mixup import mixup_page
-from arcana.longresponse import longresponse_page
-from arcana.editor import editor_page
-from arcana.speech_to_text import speech_to_text_page
-from arcana.config import APP_TITLE, CACHE_DIR, INDEX_FILE
-from arcana.fiber import FiberDBMS
-from arcana.theme import apply_theme
+from finder import files_page
+from chatbot import chatbot_page
+from settings import settings_page
+from mixup import mixup_page
+from longresponse import longresponse_page
+from editor import editor_page
+from speech_to_text import speech_to_text_page
+from config import APP_TITLE, CACHE_DIR, INDEX_FILE
+from fiber import FiberDBMS
+from theme import apply_theme
 
 # --- Application Setup ---
 
@@ -39,14 +39,14 @@ def initialize_app():
         st.session_state.theme = "Light"
 
     # 3. Ensure NLTK data is available
-    from arcana import nltk_setup  # This will automatically download required NLTK data
+    import nltk_setup  # This will automatically download required NLTK data
 
     # 4. Ensure necessary directories exist
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     # 4b. Build initial index if it does not exist yet
     if not os.path.exists(INDEX_FILE):
-        from arcana.indexing import indexing as build_index  # local import to avoid circular
+        from indexing import indexing as build_index  # local import to avoid circular
         with st.spinner("First-time setup: building document index… this may take a while"):
             build_index(CACHE_DIR)
             st.success("Initial indexing complete!")

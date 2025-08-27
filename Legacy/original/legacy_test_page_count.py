@@ -15,7 +15,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(__file__))
 
-from arcana.mixup import get_page_count_instructions, get_markdown_formatting_instructions
+from mixup import get_page_count_instructions, get_markdown_formatting_instructions
 
 def test_page_count_instructions():
     """Test the page count instruction generation."""
