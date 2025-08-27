@@ -109,35 +109,16 @@ if st.sidebar.button("Settings", key="settings_btn"):
 
 def intro_page():
     """
-    Introduction/Welcome page with system information and overview.
+    Display the project README as the introduction page and optionally show
+    system information.
     """
-    st.title(f"Welcome to {APP_TITLE}")
-    st.markdown("""
-    ## 🌟 Your AI-Powered Assistant
-    
-    Arcana is your intelligent assistant for creating documents, presentations, 
-    and study materials. Upload files, build a knowledge base, and interact 
-    with your data through our advanced AI chatbot.
-    
-    ### 🚀 Getting Started
-    1. **Files**: Upload and organize your documents
-    2. **Chatbot**: Ask questions and get AI-powered responses
-    3. **Mixup**: Generate presentations and study guides
-    4. **Editor**: AI-assisted document editing
-    
-    ### 🔧 Advanced Features
-    - **Long Response**: Deep analysis of lengthy documents
-    - **Citations**: Manage your academic references
-    - **Multiple Languages**: Interface available in several languages
-    
-    ### 📊 System Status
-    """)
-    
-    # Show system information if requested
+    with open("README.md", "r", encoding="utf-8") as f:
+        st.markdown(f.read())
+
     if st.button("Show System Information", key="show_sys_info"):
         import socket
         import uuid
-        
+
         def get_ip_address():
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -147,11 +128,10 @@ def intro_page():
                 return ip
             except Exception:
                 return "127.0.0.1"
-        
+
         def get_mac_address():
-            import uuid
             return ':'.join([f'{(uuid.getnode() >> i) & 0xff:02x}' for i in range(0, 48, 8)][::-1])
-        
+
         st.subheader("System Information")
         st.write(f"**IP Address:** {get_ip_address()}")
         st.write(f"**MAC Address:** {get_mac_address()}")
@@ -161,43 +141,10 @@ def intro_page():
 
 def citations_page():
     """
-    Citations page for managing academic references.
+    Render the project's citation information from the citations markdown file.
     """
-    st.title("📚 Academic & Resource Citations")
-    st.markdown("""
-    ## How to Cite Arcana
-    
-    ### For Academic Papers:
-    ```
-    Arcana AI Assistant. (2024). Arcana: AI-Powered Document Processing System. 
-    Version 1.0.0. Retrieved from https://github.com/CelsiaSolaraStarflare/Arcana
-    ```
-    
-    ### For Presentations:
-    ```
-    Arcana AI Assistant (2024). Arcana v1.0.0. 
-    AI-powered document processing and chatbot system.
-    ```
-    
-    ### Development Team:
-    - **Osmond G11**: Base algorithm coding, DBMS designing, API functions
-    - **Celsia G11**: UI Coding and platform conditioning  
-    - **Brian G10**: Debugging and mirroring platform
-    - **Pete G10**: Database arrangement and testing
-    
-    ### Technologies Used:
-    - **Streamlit**: Web application framework
-    - **OpenAI API**: AI language models
-    - **NLTK**: Natural language processing
-    - **Python**: Core programming language
-    
-    ### License Information:
-    This project is licensed under CC-BY-ND-SA by Indexademics.
-    - ❌ No derivatives
-    - ❌ No unauthorized redistribution  
-    - ✅ Attribution required
-    - ✅ Sharing with proper credit allowed
-    """)
+    with open("citations.md", "r", encoding="utf-8") as f:
+        st.markdown(f.read())
 
 # Page mapping
 pages = {
