@@ -41,9 +41,13 @@ def save_chat_history(session_name=None):
     
     # Filter out system messages for cleaner history
     user_messages = [msg for msg in st.session_state.messages if msg["role"] != "system"]
-    
+
+    # Generate a short tagline based on the conversation
+    tagline = generate_chat_tagline(user_messages)
+
     chat_data = {
         "session_name": session_name,
+        "tagline": tagline,
         "timestamp": datetime.datetime.now().isoformat(),
         "messages": user_messages,
         "processed_file_name": st.session_state.get('processed_file_name', None)
@@ -116,6 +120,7 @@ def get_available_chat_histories():
                     'filename': filename,
                     'filepath': file_path,
                     'session_name': chat_data.get('session_name', filename[:-5]),
+                    'tagline': chat_data.get('tagline', ''),
                     'timestamp': chat_data.get('timestamp', 'Unknown'),
                     'message_count': len(chat_data.get('messages', [])),
                     'modified_time': file_mtime
@@ -126,6 +131,18 @@ def get_available_chat_histories():
     # Sort by file modification time (most recently modified first)
     histories.sort(key=lambda x: x['modified_time'], reverse=True)
     return histories
+
+def generate_chat_tagline(messages):
+    """Generate a short tagline from the conversation."""
+    try:
+        content = " ".join(msg["content"] for msg in messages if msg["role"] == "user")
+        if not content:
+            return ""
+        lang = detect_language(content)
+        keywords = extract_keywords(content, lang)
+        return " ".join(keywords[:3])
+    except Exception:
+        return ""
 
 def auto_generate_chat_title(messages):
     """Generate a meaningful title for the chat based on the conversation content."""
@@ -362,9 +379,13 @@ def chatbot_page():
                                 help=f"{history['message_count']} messages • {history['timestamp'][:10]}",
                                 use_container_width=True
                             ):
+                                # Save current chat before switching
+                                continuous_save_chat()
                                 if load_chat_history(history['filepath']):
                                     st.success("Chat loaded!")
                                     st.rerun()
+                            if history.get('tagline'):
+                                st.caption(history['tagline'])
                         
                         with col2:
                             if st.button("🗑️", key=f"del_{i}", help="Delete chat"):
@@ -384,9 +405,13 @@ def chatbot_page():
                                     help=f"{history['message_count']} messages • {history['timestamp'][:10]}",
                                     use_container_width=True
                                 ):
+                                    # Save current chat before switching
+                                    continuous_save_chat()
                                     if load_chat_history(history['filepath']):
                                         st.success("Chat loaded!")
                                         st.rerun()
+                                if history.get('tagline'):
+                                    st.caption(history['tagline'])
                             with col2:
                                 if st.button("🗑️", key=f"del_all_{i}", help="Delete chat"):
                                     if delete_chat_history(history['filepath']):
