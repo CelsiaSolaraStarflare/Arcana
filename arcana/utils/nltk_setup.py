@@ -34,15 +34,15 @@ def ensure_nltk_data():
     ]
     
     for data_path, package_name in required_packages:
-        try:
-            nltk.data.find(data_path)
-        except LookupError:
-            print(f"Downloading NLTK package: {package_name}")
             try:
-                nltk.download(package_name, quiet=True)
-            except Exception as e:
-                print(f"Warning: Failed to download {package_name}: {e}")
-                # Continue with other packages
+                nltk.data.find(data_path)
+            except (LookupError, OSError):
+                print(f"Downloading NLTK package: {package_name}")
+                try:
+                    nltk.download(package_name, quiet=True)
+                except Exception as e:
+                    print(f"Warning: Failed to download {package_name}: {e}")
+                    # Continue with other packages
     
     return True
 

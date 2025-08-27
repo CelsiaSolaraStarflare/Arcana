@@ -126,24 +126,23 @@ class FiberDBMS:
         self.database.clear()
         self.content_index.clear()
         with open(filename, 'r', encoding='utf-8', newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
+            # Filter out lines containing NUL bytes before passing to DictReader
+            filtered_lines = (line for line in csvfile if '\x00' not in line)
+            reader = csv.DictReader(filtered_lines)
             for idx, row in enumerate(reader):
                 try:
                     # Basic validation to ensure essential keys exist and are not None.
                     if not all(k in row and row[k] is not None for k in ['name', 'timestamp', 'content', 'tags']):
-                        print(f"[X] Skipped malformed row (missing keys): {row}")
+                        print(f"[X] Skipped malformed row {idx} (missing keys): {row}")
                         continue
-                    
                     # Handle cases where tags are stored as a stringified list.
                     tags = row['tags']
                     if tags.startswith('[') and tags.endswith(']'):
                         try:
                             tags_list = ast.literal_eval(tags)
                             tags = ','.join(str(t).strip() for t in tags_list)
-                        except (ValueError, SyntaxError):
-                            # If literal_eval fails, keep the original string but log it.
-                            print(f"[!] Could not parse tags: {tags}")
-                    
+                        except (ValueError, SyntaxError) as tag_exc:
+                            print(f"[!] Could not parse tags in row {idx}: {tags} (error: {type(tag_exc).__name__}: {tag_exc})")
                     entry = {
                         "name": row['name'],
                         "timestamp": row['timestamp'],
@@ -153,7 +152,7 @@ class FiberDBMS:
                     self.database.append(entry)
                     self._index_content(idx, entry['content'])
                 except Exception as e:
-                    print(f"[X] Skipped unreadable row: {row} (error: {e})")
+                    print(f"[X] Skipped unreadable row {idx}: {row} (error: {type(e).__name__}: {e})")
 
 
 def main():
