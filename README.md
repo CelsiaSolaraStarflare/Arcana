@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.5Beta2-orange)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.6Beta1-orange)
 ![Development Status](https://img.shields.io/badge/status-Beta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
@@ -146,3 +146,4 @@ Copyright © StandardCAS™ 2019–
 **Made with ❤️ by the Arcana Team**
 
 *Transform your documents into intelligent conversations with Arcana Extreme!*
+
