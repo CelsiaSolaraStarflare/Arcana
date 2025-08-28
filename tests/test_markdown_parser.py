@@ -5,7 +5,7 @@ Test script for the markdown parser functionality in mixup.py
 
 import os
 import sys
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from docx import Document
 from arcana.mixup import parse_markdown_content_to_word, parse_markdown_to_word_runs

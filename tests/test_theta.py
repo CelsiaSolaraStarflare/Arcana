@@ -24,7 +24,7 @@ def main():
     if not THETA_AVAILABLE:
         st.error("❌ Streamlit Theta not installed!")
         st.markdown("**Install it with:**")
-        st.code("python build_and_install.py")
+        st.code("python utils/build_and_install.py")
         st.markdown("**Or manually:**")
         st.code("pip install build && python -m build && pip install dist/streamlit_theta-1.0.0-py3-none-any.whl")
         return
