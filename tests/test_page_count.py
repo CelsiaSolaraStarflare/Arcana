@@ -13,7 +13,7 @@ Test script for page count functionality in Study Gui        print("📋 Page Co
 
 import sys
 import os
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from arcana.mixup import get_page_count_instructions, get_markdown_formatting_instructions
 
