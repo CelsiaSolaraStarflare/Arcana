@@ -6,8 +6,27 @@ Import this module before using NLTK functions to guarantee data availability.
 
 import nltk
 import ssl
-import os
 from functools import lru_cache
+from urllib.error import URLError
+
+
+def _patch_ssl_context():
+    """Temporarily replace the default HTTPS context with an unverified one."""
+    try:
+        create_unverified = ssl._create_unverified_context
+    except AttributeError:
+        # The attribute is not available (e.g. on very old Python builds)
+        return None
+
+    original_context = ssl._create_default_https_context
+    ssl._create_default_https_context = create_unverified
+    return original_context
+
+
+def _restore_ssl_context(original_context):
+    """Restore the default HTTPS context if it was patched."""
+    if original_context is not None:
+        ssl._create_default_https_context = original_context
 
 
 @lru_cache(maxsize=1)
@@ -20,12 +39,7 @@ def ensure_nltk_data():
         bool: True if all data is available
     """
     # Handle SSL certificate issues for NLTK downloads
-    try:
-        _create_unverified_https_context = ssl._create_unverified_context
-    except AttributeError:
-        pass
-    else:
-        ssl._create_default_https_context = _create_unverified_https_context
+    original_ssl_context = _patch_ssl_context()
     
     required_packages = [
         ('tokenizers/punkt_tab', 'punkt_tab'),
@@ -34,15 +48,26 @@ def ensure_nltk_data():
     ]
     
     for data_path, package_name in required_packages:
+        try:
+            nltk.data.find(data_path)
+        except (LookupError, OSError):
+            print(f"Downloading NLTK package: {package_name}")
             try:
-                nltk.data.find(data_path)
-            except (LookupError, OSError):
-                print(f"Downloading NLTK package: {package_name}")
-                try:
-                    nltk.download(package_name, quiet=True)
-                except Exception as e:
-                    print(f"Warning: Failed to download {package_name}: {e}")
-                    # Continue with other packages
+                if not nltk.download(package_name, quiet=True):
+                    print(
+                        f"Warning: Download returned False for {package_name}. "
+                        "The package might be unavailable."
+                    )
+            except (URLError, ssl.SSLError) as err:
+                print(
+                    "Warning: Network/SSL error occurred while downloading "
+                    f"{package_name}: {err}"
+                )
+            except Exception as err:
+                print(f"Warning: Failed to download {package_name}: {err}")
+                # Continue with other packages
+
+    _restore_ssl_context(original_ssl_context)
     
     return True
 
