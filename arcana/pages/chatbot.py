@@ -9,12 +9,124 @@ from arcana.core.config import INDEX_FILE, CACHE_DIR
 import os
 import json
 import datetime
+import re
+from typing import Iterable, List, Tuple
 from docx import Document
 from pptx import Presentation
 import chardet
 from PyPDF2 import PdfReader
 import pandas as pd
 from arcana.utils.indexing import extract_keywords, detect_language
+
+
+def _unique_preserve_order(items: Iterable[str]) -> List[str]:
+    """Return a list of unique items while preserving their original order."""
+
+    seen = set()
+    unique_items: List[str] = []
+    for item in items:
+        if item not in seen:
+            unique_items.append(item)
+            seen.add(item)
+    return unique_items
+
+
+def _parse_keyword_response(response_text: str) -> List[str]:
+    """Parse the raw keyword response text returned by the language model."""
+
+    if not response_text:
+        return []
+
+    cleaned = response_text.replace("Keywords:", "")
+    # Split on commas, semicolons, or newlines and remove numbering/bullets
+    raw_candidates = re.split(r"[\n,;]", cleaned)
+    parsed: List[str] = []
+    for candidate in raw_candidates:
+        candidate = re.sub(r"^[\s\-•*\d\.]+", "", candidate).strip()
+        if candidate:
+            parsed.append(candidate)
+    return _unique_preserve_order(parsed)
+
+
+def generate_keywords_with_gpt(query: str, language: str, max_keywords: int = 15) -> Tuple[List[str], str]:
+    """Generate a list of search keywords using the language model."""
+
+    if not query:
+        return [], ""
+
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "You craft focused keyword lists for searching a document database. "
+                "Return a concise list (comma separated) of topical keywords and phrases that "
+                "will help retrieve passages relevant to the user's request. "
+                "Prioritize terms that are likely to appear in the source documents and stay on topic. "
+                "Do not add explanations."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Generate search keywords for the following query. "
+                f"Primary language hint: {language}. "
+                f"Query: {query}"
+            ),
+        },
+    ]
+
+    try:
+        stream = openai_api_call(prompt, "Normal")
+        chunks: List[str] = []
+        for piece in stream:
+            chunks.append(piece)
+        response_text = "".join(chunks).strip()
+        keywords = _parse_keyword_response(response_text)
+        if not keywords:
+            return [], response_text
+        return keywords[:max_keywords], response_text
+    except Exception:
+        return [], ""
+
+
+def query_dbms_with_keywords(dbms: FiberDBMS, keywords: List[str], max_results: int = 5) -> Tuple[List[dict], List[Tuple[str, int]]]:
+    """Query the DBMS with combinations of the provided keywords."""
+
+    if not keywords:
+        return [], []
+
+    aggregated_results: List[dict] = []
+    search_attempts: List[Tuple[str, int]] = []
+    seen_entries = set()
+
+    def add_results(query_text: str, new_results: List[dict]):
+        if new_results is None:
+            count = 0
+        else:
+            count = 0
+            for result in new_results:
+                identifier = (result.get("name"), result.get("content"))
+                if identifier in seen_entries:
+                    continue
+                seen_entries.add(identifier)
+                aggregated_results.append(result)
+                count += 1
+                if len(aggregated_results) >= max_results:
+                    break
+        search_attempts.append((query_text, count))
+        return len(aggregated_results) >= max_results
+
+    # First, try a combined query using the most important keywords.
+    combined_query = " ".join(keywords[: min(5, len(keywords))])
+    if combined_query:
+        add_results(combined_query, dbms.query(combined_query, top_n=max_results))
+
+    if len(aggregated_results) < max_results:
+        for keyword in keywords:
+            if add_results(keyword, dbms.query(keyword, top_n=max_results)):
+                break
+
+    return aggregated_results[:max_results], search_attempts
 
 # NLTK data is now handled centrally in Arcanalte.py
 
@@ -540,27 +652,73 @@ def chatbot_page():
         if st.session_state.get('processed_file_name') is None:
             with st.spinner("Searching for relevant information..."):
                 lang = detect_language(user_input)
-                keywords = extract_keywords(user_input, lang)
+                keyword_source = "nltk"
+                keyword_generation_raw = ""
 
-                # Use the dbms instance from session state
-                results = []
+                keywords: List[str] = []
+                if response_type == "Normal":
+                    gpt_keywords, keyword_generation_raw = generate_keywords_with_gpt(user_input, lang)
+                    if gpt_keywords:
+                        keywords = gpt_keywords
+                        keyword_source = "language_model"
+                if not keywords:
+                    keywords = extract_keywords(user_input, lang)
+                    keyword_source = "nltk" if keywords else keyword_source
+
+                results: List[dict] = []
+                search_attempts: List[Tuple[str, int]] = []
                 if keywords:
-                    results = dbms.query(
-                        " ".join(keywords[:20]),
-                        top_n=min(20, max(1, len(keywords)))
-                    )
-                    results = results[:5]
+                    if keyword_source == "language_model":
+                        results, search_attempts = query_dbms_with_keywords(dbms, keywords)
+                    else:
+                        query_text = " ".join(keywords[:20])
+                        raw_results = dbms.query(
+                            query_text,
+                            top_n=min(20, max(1, len(keywords)))
+                        )
+                        raw_results = raw_results or []
+                        results = raw_results[:5]
+                        search_attempts = [(query_text, len(results))]
 
-                assistant_reply = ""
+                assistant_reply_lines = [
+                    "INTERNAL SEARCH CONTEXT (not visible to the user):",
+                    "Evaluate the following snippets and only cite information that is accurate and relevant.",
+                    "If no snippets answer the query, tell the user you could not find the information in the indexed files.",
+                    f"Keyword generation method: {keyword_source}",
+                ]
+
+                if keywords:
+                    assistant_reply_lines.append(
+                        "Keywords considered: " + ", ".join(keywords[:20])
+                    )
+                if search_attempts:
+                    assistant_reply_lines.append("Search attempts:")
+                    for query_text, count in search_attempts:
+                        assistant_reply_lines.append(
+                            f"- `{query_text}` → {count} new snippet(s)"
+                        )
+                if keyword_generation_raw and keyword_source == "language_model":
+                    assistant_reply_lines.append(
+                        "Raw keyword suggestion response: " + keyword_generation_raw
+                    )
+
+                assistant_reply = "\n".join(assistant_reply_lines) + "\n\n"
+
                 if results:
                     assistant_reply += "Here are the top results from your documents:\n\n"
                     for idx, result in enumerate(results, 1):
                         assistant_reply += f"**Result {idx} from `{result['name']}`:**\n"
                         assistant_reply += f"_{result['content']}_\n\n"
                 elif keywords:
-                    assistant_reply = "I couldn't find any specific information related to your query in the indexed documents."
+                    assistant_reply += (
+                        "No specific passages were retrieved. Let the user know that the indexed documents did not contain "
+                        "information matching their request."
+                    )
                 else:
-                    assistant_reply = "I couldn't derive useful keywords from your query to search the indexed documents."
+                    assistant_reply += (
+                        "Keyword extraction failed. Inform the user that the system could not understand the query well "
+                        "enough to search the documents."
+                    )
 
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
 
