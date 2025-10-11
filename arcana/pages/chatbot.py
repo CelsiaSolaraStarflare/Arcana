@@ -16,7 +16,24 @@ from pptx import Presentation
 import chardet
 from PyPDF2 import PdfReader
 import pandas as pd
+import requests
+import xml.etree.ElementTree as ET
+from html import unescape
 from arcana.utils.indexing import extract_keywords, detect_language
+
+
+BASE_SYSTEM_PROMPT = (
+    "You are a helpful AI assistant named Arcana. You will be provided with search results "
+    "from a user's documents and, when enabled, web supplements. Prioritize the provided "
+    "document snippets for answers and cite the source document's name for information "
+    "taken from them, like this: `(Source: document_name.pdf)`. If the provided text does "
+    "not contain the answer but the question involves widely known general knowledge, "
+    "answer accurately using your own knowledge. When web supplement results are provided, "
+    "you may incorporate them and cite the corresponding URLs. Always conclude your reply "
+    "with a line that begins with `Sources:` followed by a comma-separated list of the "
+    "sources you used. If you had to rely solely on general knowledge and no citations are "
+    "available, end with `Sources: No sources cited.` Be friendly, cute, and helpful."
+)
 
 
 def _unique_preserve_order(items: Iterable[str]) -> List[str]:
@@ -46,6 +63,102 @@ def _parse_keyword_response(response_text: str) -> List[str]:
         if candidate:
             parsed.append(candidate)
     return _unique_preserve_order(parsed)
+
+
+def _clean_html_snippet(snippet: str) -> str:
+    """Convert a raw HTML snippet from Bing into a readable plain-text summary."""
+
+    if not snippet:
+        return ""
+
+    text = unescape(snippet)
+    # Remove simple HTML tags that occasionally show up in RSS descriptions
+    text = re.sub(r"<[^>]+>", "", text)
+    return text.strip()
+
+
+def search_bing(query: str, max_results: int = 3) -> List[dict]:
+    """Fetch supplemental search results from Bing's RSS feed for the query."""
+
+    if not query:
+        return []
+
+    try:
+        response = requests.get(
+            "https://www.bing.com/search",
+            params={"q": query, "format": "rss"},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except Exception:
+        return []
+
+    try:
+        root = ET.fromstring(response.text)
+    except ET.ParseError:
+        return []
+
+    items: List[dict] = []
+    for item in root.findall(".//item"):
+        title = item.findtext("title") or ""
+        link = item.findtext("link") or ""
+        description = _clean_html_snippet(item.findtext("description") or "")
+        if title and link:
+            items.append({"title": title, "link": link, "snippet": description})
+        if len(items) >= max_results:
+            break
+
+    return items
+
+
+def _build_sources_default_line(doc_results: Iterable[dict], web_results: Iterable[dict]) -> str:
+    """Build a fallback `Sources:` line based on available document and web snippets."""
+
+    doc_names = [
+        result.get("name", "").strip()
+        for result in doc_results
+        if result.get("name")
+    ]
+    web_links = [
+        result.get("link", "").strip()
+        for result in web_results
+        if result.get("link")
+    ]
+
+    ordered_sources = _unique_preserve_order([*doc_names, *web_links])
+    if not ordered_sources:
+        return "Sources: No sources cited."
+
+    return "Sources: " + ", ".join(ordered_sources)
+
+
+def _ensure_sources_line(response_text: str, default_line: str) -> str:
+    """Guarantee the assistant response ends with a `Sources:` line."""
+
+    if not response_text:
+        return default_line
+
+    trimmed_response = response_text.rstrip("\n")
+    lines = trimmed_response.splitlines()
+
+    # Find the last non-empty line to check whether it already contains sources
+    last_nonempty_line = ""
+    for line in reversed(lines):
+        if line.strip():
+            last_nonempty_line = line.strip()
+            break
+
+    if last_nonempty_line.lower().startswith("sources:"):
+        return trimmed_response + ("\n" if response_text.endswith("\n") else "")
+
+    lower_sources_line = default_line.strip().lower()
+    if lower_sources_line.startswith("sources:"):
+        appended_line = default_line
+    else:
+        appended_line = "Sources: No sources cited."
+
+    suffix = "\n" if not response_text.endswith("\n") else ""
+    return response_text + suffix + appended_line
 
 
 def generate_keywords_with_gpt(query: str, language: str, max_keywords: int = 15) -> Tuple[List[str], str]:
@@ -184,8 +297,8 @@ def load_chat_history(file_path):
         
         # Add the initial system message first
         st.session_state.messages.append({
-            "role": "system", 
-            "content": "You are a helpful AI assistant named Arcana. You will be provided with search results from a user's documents. Your task is to answer the user's questions based *only* on the provided text. Cite the source document's name for all information you provide, like this: `(Source: document_name.pdf)`. If the provided text does not contain the answer, state that clearly. Be friendly, cute, and helpful."
+            "role": "system",
+            "content": BASE_SYSTEM_PROMPT,
         })
         
         # Add the welcome message only if there are no user messages in history
@@ -629,6 +742,15 @@ def chatbot_page():
     # Response type selector (more compact)
     with st.container():
         col1, col2 = st.columns([3, 1])
+        with col1:
+            web_supplement_enabled = st.checkbox(
+                "Web supplement (Bing)",
+                help=(
+                    "When enabled, Arcana fetches public web search results from Bing to"
+                    " supplement your indexed documents."
+                ),
+                key="web_supplement_enabled",
+            )
         with col2:
             response_type = st.selectbox(
                 "Mode",
@@ -643,6 +765,7 @@ def chatbot_page():
             )
 
     if user_input:
+        st.session_state.pending_sources_default = "Sources: No sources cited."
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
@@ -654,6 +777,7 @@ def chatbot_page():
                 lang = detect_language(user_input)
                 keyword_source = "nltk"
                 keyword_generation_raw = ""
+                bing_results: List[dict] = []
 
                 keywords: List[str] = []
                 if response_type == "Normal":
@@ -680,10 +804,13 @@ def chatbot_page():
                         results = raw_results[:5]
                         search_attempts = [(query_text, len(results))]
 
+                if web_supplement_enabled:
+                    bing_results = search_bing(user_input)
+
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
                     "Evaluate the following snippets and only cite information that is accurate and relevant.",
-                    "If no snippets answer the query, tell the user you could not find the information in the indexed files.",
+                    "If no snippets answer the query, explain that the indexed files lacked the information and rely on web supplements or well-known general knowledge to respond accurately.",
                     f"Keyword generation method: {keyword_source}",
                 ]
 
@@ -702,6 +829,20 @@ def chatbot_page():
                         "Raw keyword suggestion response: " + keyword_generation_raw
                     )
 
+                if web_supplement_enabled:
+                    if bing_results:
+                        assistant_reply_lines.append(
+                            "Web supplement results from Bing (cite using the provided URLs):"
+                        )
+                        for result in bing_results:
+                            assistant_reply_lines.append(
+                                f"- {result['title']} ({result['link']}): {result['snippet']}"
+                            )
+                    else:
+                        assistant_reply_lines.append(
+                            "Bing web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
+                        )
+
                 assistant_reply = "\n".join(assistant_reply_lines) + "\n\n"
 
                 if results:
@@ -712,7 +853,8 @@ def chatbot_page():
                 elif keywords:
                     assistant_reply += (
                         "No specific passages were retrieved. Let the user know that the indexed documents did not contain "
-                        "information matching their request."
+                        "information matching their request, then answer using web supplements if available or accurate "
+                        "general knowledge."
                     )
                 else:
                     assistant_reply += (
@@ -720,6 +862,11 @@ def chatbot_page():
                         "enough to search the documents."
                     )
 
+                assistant_reply += (
+                    "\nAlways end the final response with a 'Sources:' line listing every citation or 'Sources: No sources cited.'"
+                )
+
+                st.session_state.pending_sources_default = _build_sources_default_line(results, bing_results)
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
 
         with st.spinner("Arcana is thinking..."):
@@ -751,6 +898,17 @@ def chatbot_page():
 
                     st.write_stream(stream_and_collect())
                     full_response = "".join(collected_chunks)
+                    default_sources_line = st.session_state.get(
+                        "pending_sources_default",
+                        "Sources: No sources cited.",
+                    )
+                    ensured_response = _ensure_sources_line(full_response, default_sources_line)
+                    if ensured_response != full_response:
+                        extra_text = ensured_response[len(full_response):]
+                        if extra_text:
+                            st.markdown(extra_text)
+                        full_response = ensured_response
+                    st.session_state.pending_sources_default = "Sources: No sources cited."
 
                     if response_type == "Reasoning" and response_generator.has_reasoning():
                         with st.expander("Show Arcana's reasoning", expanded=False):
@@ -772,5 +930,5 @@ def init_messages():
     """Initializes or resets the chat message history in the session state."""
     st.session_state.messages = [
         {"role": "assistant", "content": "Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about your indexed files!"},
-        {"role": "system", "content": "You are a helpful AI assistant named Arcana. You will be provided with search results from a user's documents. Your task is to answer the user's questions based *only* on the provided text. Cite the source document's name for all information you provide, like this: `(Source: document_name.pdf)`. If the provided text does not contain the answer, state that clearly. Be friendly, cute, and helpful."},
+        {"role": "system", "content": BASE_SYSTEM_PROMPT},
     ]
