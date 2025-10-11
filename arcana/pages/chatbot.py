@@ -1,12 +1,9 @@
 import streamlit as st
 import openai
 from arcana.utils.response import openai_api_call
-import nltk
 
 # Ensure NLTK data is available before importing NLTK functions
 import arcana.utils.nltk_setup
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 from arcana.utils.fiber import FiberDBMS
 from arcana.core.config import INDEX_FILE, CACHE_DIR
 import os
@@ -541,13 +538,17 @@ def chatbot_page():
         # If a file HAS been processed, its context is already in the messages, so we skip this.
         if st.session_state.get('processed_file_name') is None:
             with st.spinner("Searching for relevant information..."):
-                stop_words = set(stopwords.words('english'))
-                words = word_tokenize(user_input)
-                keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]
-                
+                lang = detect_language(user_input)
+                keywords = extract_keywords(user_input, lang)
+
                 # Use the dbms instance from session state
-                results = dbms.query(" ".join(keywords), top_n=min(20, max(1, len(keywords))))
-                results = results[:5]
+                results = []
+                if keywords:
+                    results = dbms.query(
+                        " ".join(keywords[:20]),
+                        top_n=min(20, max(1, len(keywords)))
+                    )
+                    results = results[:5]
 
                 assistant_reply = ""
                 if results:
@@ -555,8 +556,10 @@ def chatbot_page():
                     for idx, result in enumerate(results, 1):
                         assistant_reply += f"**Result {idx} from `{result['name']}`:**\n"
                         assistant_reply += f"_{result['content']}_\n\n"
-                else:
+                elif keywords:
                     assistant_reply = "I couldn't find any specific information related to your query in the indexed documents."
+                else:
+                    assistant_reply = "I couldn't derive useful keywords from your query to search the indexed documents."
 
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
 
