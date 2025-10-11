@@ -1,4 +1,6 @@
 import os
+from typing import Iterable, List
+
 import pandas as pd
 from docx import Document
 from pptx import Presentation
@@ -8,24 +10,81 @@ import nltk
 
 # Ensure NLTK data is available before importing NLTK functions
 import arcana.utils.nltk_setup
-from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from PyPDF2 import PdfReader
 import csv
 import re
 import ast
+from openai.types.chat import ChatCompletionMessageParam
+
+from arcana.utils.response import openai_api_call
 from arcana.core.config import INDEX_FILE
 
 # NLTK data is now downloaded once in Arcanalte.py at startup.
 
-def extract_keywords(text, lang='en'):
-    # Handles both English and Chinese, and ignores emojis/symbols
+def extract_keywords(text, lang: str = 'en', minimum_nltk_keywords: int = 3) -> List[str]:
+    """Generate keyword tags for *text*.
+
+    NLTK is used first for fast, local keyword extraction. If NLTK fails to
+    surface a sufficient number of keywords, an OpenAI-compatible model is
+    called to generate higher quality tags. The model fallback is intentionally
+    lightweight and keeps the existing Fiber DBMS workflow unchanged.
+    """
+    nltk_keywords = _extract_keywords_with_nltk(text, lang)
+    if len(nltk_keywords) >= minimum_nltk_keywords:
+        return nltk_keywords
+
+    model_keywords = generate_keywords_with_model(text, lang)
+    # Fall back to the NLTK output if the API could not provide anything better
+    return model_keywords or nltk_keywords
+
+
+def _extract_keywords_with_nltk(text: str, lang: str) -> List[str]:
+    """Return keyword candidates using the existing NLTK pipeline."""
     stop_words = set(stopwords.words('english')) if lang == 'en' else set()
-    # Tokenize Chinese and English, keep CJK, ignore symbols/emojis
     words = re.findall(r'[\u4e00-\u9fff]+|[a-zA-Z]+', text)
     if lang == 'en':
         return [w for w in words if w.lower() not in stop_words]
     return words
+
+
+def generate_keywords_with_model(text: str, lang: str = 'en', max_keywords: int = 10) -> List[str]:
+    """Use the hosted model API to derive concise keyword tags for a text."""
+    if not text.strip():
+        return []
+
+    prompt = (
+        "Extract up to {max_keywords} concise search keywords for the following "
+        "text. Respond with a comma-separated list of lowercase keywords only. "
+        "Avoid stop words and duplicates."
+    ).format(max_keywords=max_keywords)
+
+    user_content = f"Language: {lang}\nText: {text.strip()}"
+    messages: Iterable[ChatCompletionMessageParam] = [
+        {"role": "system", "content": "You create keyword tags for fast document search."},
+        {"role": "user", "content": f"{prompt}\n\n{user_content}"},
+    ]
+
+    try:
+        response_text = ''.join(openai_api_call(messages, "Idx")).strip()
+    except Exception as exc:  # pragma: no cover - defensive programming
+        print(f"Keyword generation API failed: {exc}")
+        return []
+
+    if not response_text:
+        return []
+
+    # Accept comma, newline, or semicolon separated keywords
+    raw_keywords = re.split(r'[\n;,]', response_text)
+    cleaned_keywords: List[str] = []
+    seen = set()
+    for keyword in raw_keywords:
+        cleaned = re.sub(r'[^\w\u4e00-\u9fff]+', '', keyword.strip().lower())
+        if cleaned and cleaned not in seen:
+            cleaned_keywords.append(cleaned)
+            seen.add(cleaned)
+
+    return cleaned_keywords[:max_keywords]
 
 def detect_language(text):
     # Simple check: if contains CJK, treat as Chinese
