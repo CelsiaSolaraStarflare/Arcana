@@ -7,7 +7,6 @@ chardet
 jieba
 nltk
 PyPDF2
-requests
 uuid
 streamlit
 dashscope>=1.20.0
