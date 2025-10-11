@@ -9,12 +9,11 @@ import requests
 
 # Ensure NLTK data is available before importing NLTK functions
 import arcana.utils.nltk_setup
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 
 from arcana.utils.response import openai_api_call
 from arcana.utils.fiber import FiberDBMS
 from arcana.core.config import GENERATED_FILES_DIR
+from arcana.utils.indexing import extract_keywords, detect_language
 from openai.types.chat import ChatCompletionMessageParam
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -417,14 +416,13 @@ def init_study_guide_state(force_reset=False):
 
 def get_context_for_topic(dbms, topic):
     """Extracts keywords from a topic and queries the database for relevant context."""
-    stop_words = set(stopwords.words('english'))
-    words = word_tokenize(topic)
-    keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]
-    
+    lang = detect_language(topic)
+    keywords = extract_keywords(topic, lang)
+
     if not keywords:
         return "" # Return empty string if no keywords are found
 
-    results = dbms.query(" ".join(keywords), top_n=10)
+    results = dbms.query(" ".join(keywords[:10]), top_n=10)
     
     if not results:
         return "" # Return empty string if no context is found
