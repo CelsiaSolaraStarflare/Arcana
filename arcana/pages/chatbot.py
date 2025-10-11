@@ -520,11 +520,12 @@ def chatbot_page():
         with col2:
             response_type = st.selectbox(
                 "Mode",
-                ["Normal", "IDX", "Math"],
+                ["Normal", "IDX", "Math", "Reasoning"],
                 help="""
                 **Normal**: General conversation with search context
                 **IDX**: Strictly based on indexed files
                 **Math**: Specialized for mathematical queries
+                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
                 """,
                 label_visibility="collapsed"
             )
@@ -569,9 +570,20 @@ def chatbot_page():
                 if 'processed_file_name' not in st.session_state:
                     st.session_state.processed_file_name = None
 
+                messages_to_send = list(st.session_state.messages)
+                if response_type == "Reasoning":
+                    messages_to_send.append({
+                        "role": "system",
+                        "content": (
+                            "You are in deep reasoning mode. Think through the problem step by step before answering. "
+                            "Provide a thorough explanation that breaks complex ideas into clear stages so the user can "
+                            "understand the concept deeply."
+                        )
+                    })
+
                 with st.chat_message("assistant"):
                     # Use st.write_stream to render the response in real-time
-                    response_generator = openai_api_call(st.session_state.messages, response_type)
+                    response_generator = openai_api_call(messages_to_send, response_type)
                     collected_chunks = []
 
                     def stream_and_collect():
@@ -581,6 +593,11 @@ def chatbot_page():
 
                     st.write_stream(stream_and_collect())
                     full_response = "".join(collected_chunks)
+
+                    if response_type == "Reasoning" and response_generator.has_reasoning():
+                        with st.expander("Show Arcana's reasoning", expanded=False):
+                            reasoning_text = response_generator.reasoning.replace("\n", "  \n")
+                            st.markdown(reasoning_text or "(Reasoning trace was empty.)")
                 
                 # Append the full response to the message history
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
