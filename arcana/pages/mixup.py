@@ -11,9 +11,9 @@ import requests
 import arcana.nltk_setup
 from arcana.nltk_setup import safe_word_tokenize as word_tokenize, safe_stopwords as stopwords
 
-from response import openai_api_call
-from arcana.fiber import FiberDBMS
-from scripts.config import GENERATED_FILES_DIR
+from arcana.utils.response import openai_api_call
+from arcana.utils.fiber import FiberDBMS
+from arcana.core.config import GENERATED_FILES_DIR
 from openai.types.chat import ChatCompletionMessageParam
 from pptx import Presentation
 from pptx.util import Inches, Pt
