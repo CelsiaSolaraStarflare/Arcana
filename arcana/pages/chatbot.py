@@ -613,14 +613,14 @@ def extract_content_from_file(uploaded_file):
 def chatbot_page():
     st.title("Chat With Arcana")
     
-    # Add custom CSS for ChatGPT-like styling
+    # Add custom CSS for a clean, familiar chat composer
     st.markdown("""
     <style>
     .sidebar .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    
+
     .chat-history-item {
         background-color: #f7f7f8;
         border-radius: 8px;
@@ -628,11 +628,11 @@ def chatbot_page():
         margin: 4px 0;
         border: 1px solid #e5e5e7;
     }
-    
+
     .chat-history-item:hover {
         background-color: #ececf1;
     }
-    
+
     .new-chat-btn {
         background: linear-gradient(90deg, #1f2937 0%, #374151 100%);
         color: white;
@@ -642,12 +642,12 @@ def chatbot_page():
         font-weight: 600;
         margin-bottom: 16px;
     }
-    
+
     /* Reduce sidebar spacing */
     .css-1d391kg {
         padding-top: 1rem;
     }
-    
+
     /* Style section headers */
     .sidebar-section-header {
         font-size: 14px;
@@ -656,49 +656,111 @@ def chatbot_page():
         margin-bottom: 8px;
     }
 
-    .arcana-chatbox {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 16px;
-        padding: 16px 20px 12px;
+    /* Chat composer */
+    .arcana-composer {
+        background: #f4f5f8;
+        border: 1px solid #d7dbe7;
+        border-radius: 24px;
+        padding: 18px 20px 14px;
         margin-top: 20px;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
     }
 
-    .arcana-chatbox .toolbar-title {
+    .arcana-composer .composer-label {
+        font-size: 0.75rem;
         font-weight: 600;
-        color: #1f2937;
-        font-size: 0.85rem;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        margin: 0 0 0.5rem;
+        color: #4b5563;
+        margin-bottom: 0.75rem;
     }
 
-    .arcana-chatbox .stTextArea textarea {
-        border-radius: 12px;
-        border-color: #d1d5db;
+    .arcana-composer div[data-testid="stTextArea"] textarea {
         background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 18px;
+        padding: 14px 16px;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        min-height: 110px;
+        box-shadow: none;
     }
 
-    .arcana-chatbox .stButton > button {
-        border-radius: 9999px;
+    .arcana-composer div[data-testid="stTextArea"] textarea:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
+    .arcana-composer .composer-footer {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 12px;
+    }
+
+    .arcana-composer .chip-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .arcana-composer .chip {
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 0.82rem;
+        border: 1.5px solid #1f2937;
+        color: #1f2937;
+        background: #ffffff;
         font-weight: 600;
     }
 
-    .arcana-chatbox .arcana-toolbar {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 0;
-        margin: 12px 0 0;
+    .arcana-composer .chip.active {
+        border-color: #2563eb;
+        color: #1d4ed8;
+        background: #eef2ff;
     }
 
-    .arcana-chatbox .arcana-toolbar div[data-testid="stHorizontalBlock"] {
-        margin-bottom: 0.25rem;
+
+    .arcana-composer .control-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 4px;
+        display: block;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .arcana-composer .composer-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: stretch;
+    }
+
+    .arcana-composer .composer-controls .stButton > button {
+        background: linear-gradient(90deg, #111827 0%, #1f2937 100%);
+        border: none;
+        border-radius: 999px;
+        padding: 0.65rem 1.4rem;
+        font-weight: 600;
+        color: #ffffff;
+        box-shadow: none;
+    }
+
+    .arcana-composer .composer-controls .stButton > button:hover {
+        filter: brightness(1.05);
+    }
+
+    .arcana-composer .hint {
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin-top: 4px;
     }
     </style>
     """, unsafe_allow_html=True)
-
     # Initialize or load the database automatically
     if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS):
         dbms = FiberDBMS()
@@ -883,58 +945,73 @@ def chatbot_page():
     send_clicked = False
 
     with st.container():
-        st.markdown("<div class=\"arcana-chatbox\">", unsafe_allow_html=True)
+        st.markdown("<div class=\"arcana-composer\">", unsafe_allow_html=True)
+        st.markdown("<div class=\"composer-label\">Write your command</div>", unsafe_allow_html=True)
         st.text_area(
             "Chat input",
             key="chat_text_input",
             label_visibility="collapsed",
-            placeholder="Ask me anything about your documents...",
-            height=130,
+            placeholder="Type your message and press send...",
+            height=140,
         )
 
-        st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
-        st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
-        toolbar_cols = st.columns([1.5, 1.5, 1], gap="medium")
-        with toolbar_cols[0]:
-            st.markdown("**Web Search**")
-            web_supplement_enabled = st.checkbox(
-                "Web supplement (Bing)",
-                help=(
-                    "When enabled, Arcana fetches public web search results from Bing to"
-                    " supplement your indexed documents."
-                ),
-                key="web_supplement_enabled",
-                label_visibility="collapsed",
-            )
-        with toolbar_cols[1]:
-            st.markdown("**Assistant Mode**")
-            response_type = st.selectbox(
-                "Mode",
-                ["Normal", "IDX", "Math", "Reasoning"],
-                help="""
-                **Normal**: General conversation with search context
-                **IDX**: Strictly based on indexed files
-                **Math**: Specialized for mathematical queries
-                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
-                """,
-                label_visibility="collapsed",
-            )
-        with toolbar_cols[2]:
-            st.markdown("**Agent Mode**")
-            agent_mode_enabled = st.checkbox(
-                "Agent Mode",
-                help=(
-                    "When enabled, Arcana's agent reads full documents, generates summaries, "
-                    "and stores them for future chats before answering."
-                ),
-                key="agent_mode_enabled",
-                label_visibility="collapsed",
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class=\"composer-footer\">", unsafe_allow_html=True)
+        left_col, right_col = st.columns([0.68, 0.32], gap="large")
 
-        action_cols = st.columns([6, 1])
-        with action_cols[1]:
-            send_clicked = st.button("Send", key="send_button", use_container_width=True, type="primary")
+        with left_col:
+            st.markdown("<div class=\"chip-row\">", unsafe_allow_html=True)
+            st.markdown("<span class=\"chip\">Modes</span>", unsafe_allow_html=True)
+            st.markdown("<span class=\"chip active\">Agent</span>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            controls_cols = st.columns([1.1, 1.1, 1.1], gap="small")
+            with controls_cols[0]:
+                st.markdown("<span class=\"control-label\">Web</span>", unsafe_allow_html=True)
+                web_supplement_enabled = st.toggle(
+                    "Web supplement",
+                    help=(
+                        "When enabled, Arcana fetches public web search results from Bing to"
+                        " supplement your indexed documents."
+                    ),
+                    key="web_supplement_enabled",
+                    label_visibility="collapsed",
+                )
+            with controls_cols[1]:
+                st.markdown("<span class=\"control-label\">Mode</span>", unsafe_allow_html=True)
+                response_type = st.selectbox(
+                    "Assistant mode",
+                    ["Normal", "IDX", "Math", "Reasoning"],
+                    help="""
+                    **Normal**: General conversation with search context
+                    **IDX**: Strictly based on indexed files
+                    **Math**: Specialized for mathematical queries
+                    **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+                    """,
+                    label_visibility="collapsed",
+                )
+            with controls_cols[2]:
+                st.markdown("<span class=\"control-label\">Agent</span>", unsafe_allow_html=True)
+                agent_mode_enabled = st.toggle(
+                    "Agent mode",
+                    help=(
+                        "When enabled, Arcana summarises relevant documents, synthesises key points,"
+                        " and stores them for future chats before answering."
+                    ),
+                    key="agent_mode_enabled",
+                    label_visibility="collapsed",
+                )
+
+        with right_col:
+            st.markdown("<div class=\"composer-controls\">", unsafe_allow_html=True)
+            send_clicked = st.button(
+                "Send",
+                key="send_button",
+                use_container_width=True,
+            )
+            st.markdown("<div class=\"hint\">Shift + Enter for newline</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     user_input = None
