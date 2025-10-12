@@ -6,6 +6,10 @@ def apply_theme():
 
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
+    if "refiner_enable_diagnostics" not in st.session_state:
+        st.session_state.refiner_enable_diagnostics = True
+    if "refiner_enable_quality_checks" not in st.session_state:
+        st.session_state.refiner_enable_quality_checks = True
 
     theme_css = """
     <style>
@@ -132,6 +136,22 @@ def settings_page():
         "Glass": "Glassmorphism-inspired mode with translucent panels and glowing typography.",
     }
     st.info(descriptions.get(st.session_state.theme, ""))
+
+    st.markdown("---")
+    st.subheader("Rewrite Refiner")
+    st.caption(
+        "Control advanced grammar tooling such as the diagnostics dashboard and AI-powered quality reports."
+    )
+    st.checkbox(
+        "Enable diagnostics panel",
+        key="refiner_enable_diagnostics",
+        help="Toggle the quality metrics view in the Rewrite Refiner workspace.",
+    )
+    st.checkbox(
+        "Allow AI quality checks",
+        key="refiner_enable_quality_checks",
+        help="When enabled, Arcana can run AI-powered grammar and style diagnostics on your draft.",
+    )
 
     # --- Update Log ---
     with st.expander("View Update Log"):
