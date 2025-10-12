@@ -77,6 +77,91 @@ def _clean_html_snippet(snippet: str) -> str:
     return text.strip()
 
 
+_NEWS_SENSITIVE_KEYWORDS = {
+    "breaking",
+    "headline",
+    "news",
+    "latest",
+    "update",
+    "updates",
+    "today",
+    "yesterday",
+    "report",
+    "reports",
+    "reported",
+    "reporting",
+    "controversy",
+    "conflict",
+    "war",
+    "ceasefire",
+    "election",
+    "elections",
+    "politic",
+    "policy",
+    "government",
+    "diplomatic",
+    "sanction",
+    "protest",
+    "scandal",
+    "shooting",
+    "crisis",
+    "emergency",
+    "pandemic",
+    "outbreak",
+    "virus",
+    "earthquake",
+    "flood",
+    "wildfire",
+    "court ruling",
+    "verdict",
+    "indictment",
+    "charged",
+    "arrest",
+    "sports score",
+    "tournament",
+    "transfer window",
+}
+
+
+def _looks_like_news_or_sensitive_query(query: str) -> bool:
+    """Heuristically detect if a query is about current events or boundary-sensitive topics."""
+
+    if not query:
+        return False
+
+    normalized = re.sub(r"\s+", " ", query).strip().lower()
+    if not normalized:
+        return False
+
+    for keyword in _NEWS_SENSITIVE_KEYWORDS:
+        if keyword in normalized:
+            return True
+
+    month_names = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ]
+    if any(month in normalized for month in month_names) and re.search(r"\b20[2-9][0-9]\b", normalized):
+        return True
+
+    # Terms like "this week" or explicit recency requests imply current events
+    recency_patterns = [r"\bthis week\b", r"\bthis month\b", r"\blast week\b", r"\blast month\b", r"\brecent\b"]
+    if any(re.search(pattern, normalized) for pattern in recency_patterns):
+        return True
+
+    return False
+
+
 def search_bing(query: str, max_results: int = 3) -> List[dict]:
     """Fetch supplemental search results from Bing's RSS feed for the query."""
 
@@ -114,18 +199,35 @@ def search_bing(query: str, max_results: int = 3) -> List[dict]:
 def _build_sources_default_line(doc_results: Iterable[dict], web_results: Iterable[dict]) -> str:
     """Build a fallback `Sources:` line based on available document and web snippets."""
 
-    doc_names = [
-        result.get("name", "").strip()
-        for result in doc_results
-        if result.get("name")
-    ]
-    web_links = [
-        result.get("link", "").strip()
-        for result in web_results
-        if result.get("link")
-    ]
+    def _format_web_source(result: dict) -> str:
+        link = (result.get("link") or "").strip()
+        if not link:
+            return ""
 
-    ordered_sources = _unique_preserve_order([*doc_names, *web_links])
+        title = (result.get("title") or "").strip()
+        if title:
+            safe_title = re.sub(r"\s+", " ", title).strip()
+            safe_title = safe_title.replace("[", "(").replace("]", ")")
+            return f"[{safe_title}]({link})"
+
+        return link
+
+    doc_names: List[str] = []
+    for result in doc_results:
+        raw_name = result.get("name")
+        if not raw_name:
+            continue
+        name = str(raw_name).strip()
+        if not name:
+            continue
+        doc_names.append(f"{name} (Local)")
+    web_sources: List[str] = []
+    for result in web_results:
+        formatted = _format_web_source(result)
+        if formatted:
+            web_sources.append(f"{formatted} (Web)")
+
+    ordered_sources = _unique_preserve_order([*doc_names, *web_sources])
     if not ordered_sources:
         return "Sources: No sources cited."
 
@@ -804,9 +906,11 @@ def chatbot_page():
                         results = raw_results[:5]
                         search_attempts = [(query_text, len(results))]
 
+                news_sensitive_query = False
                 if web_supplement_enabled:
                     bing_results = search_bing(user_input)
-
+                    news_sensitive_query = _looks_like_news_or_sensitive_query(user_input)
+                
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
                     "Evaluate the following snippets and only cite information that is accurate and relevant.",
@@ -830,6 +934,13 @@ def chatbot_page():
                     )
 
                 if web_supplement_enabled:
+                    assistant_reply_lines.append(
+                        "When citing information from web supplements, format the citation as a Markdown link like `[Title](URL)` and include it in the final 'Sources:' line."
+                    )
+                    if news_sensitive_query:
+                        assistant_reply_lines.append(
+                            "The user's request appears to involve current events or other boundary-sensitive information. Before writing the visible reply, quietly reason about whether the local document snippets are reliable or outdated. Cross-check key facts against the Bing web results and discard any conflicting or unverifiable claims. Keep this deliberation internal and only present conclusions you can support with citations."
+                        )
                     if bing_results:
                         assistant_reply_lines.append(
                             "Web supplement results from Bing (cite using the provided URLs):"
