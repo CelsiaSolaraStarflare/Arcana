@@ -7,7 +7,11 @@ Import this module before using NLTK functions to guarantee data availability.
 import nltk
 import ssl
 from functools import lru_cache
+from typing import Iterable, List
 from urllib.error import URLError
+
+from nltk.corpus import stopwords as nltk_stopwords
+from nltk.tokenize import word_tokenize as nltk_word_tokenize
 
 
 def _patch_ssl_context():
@@ -74,3 +78,37 @@ def ensure_nltk_data():
 
 # Auto-run the setup when this module is imported
 ensure_nltk_data()
+
+
+def safe_word_tokenize(text: str) -> List[str]:
+    """Safely tokenize text using NLTK's word tokenizer.
+
+    This wrapper ensures that required tokenizer data is present before
+    delegating to :func:`nltk.word_tokenize`. If the tokenizer data is still
+    unavailable, an empty list is returned instead of raising an exception.
+    """
+
+    ensure_nltk_data()
+
+    try:
+        return nltk_word_tokenize(text)
+    except LookupError:
+        # The punkt tokenizer is unavailable even after attempting to
+        # download it. Return an empty list so callers can handle the
+        # failure gracefully.
+        return []
+
+
+def safe_stopwords(language: str = "english") -> Iterable[str]:
+    """Return stop words for the requested language if they are available.
+
+    The function ensures that the stopwords corpus exists before attempting to
+    access it. If the corpus cannot be loaded, an empty list is returned.
+    """
+
+    ensure_nltk_data()
+
+    try:
+        return nltk_stopwords.words(language)
+    except LookupError:
+        return []
