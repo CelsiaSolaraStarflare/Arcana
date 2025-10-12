@@ -1,181 +1,379 @@
+"""Interactive rewrite assistant page."""
+
+from __future__ import annotations
+
 import datetime
-import json
-from typing import Any, Dict, List
+import re
+import uuid
+from typing import Any, Dict, List, Optional
 
 import streamlit as st
+from openai.types.chat import ChatCompletionMessageParam
 
+from arcana.utils.diff import generate_inline_diff_html
 from arcana.utils.response import openai_api_call
 
 
+REWRITE_PRESETS: List[Dict[str, str]] = [
+    {
+        "key": "formal",
+        "label": "Formalize grammar",
+        "instruction": "Polish grammar, eliminate errors, and deliver the message with a professional tone.",
+    },
+    {
+        "key": "shorten",
+        "label": "Shorten",
+        "instruction": "Condense the passage by removing redundancy while preserving the essential ideas.",
+    },
+    {
+        "key": "expand",
+        "label": "Expand",
+        "instruction": "Elaborate on the core ideas with more detail and helpful transitions without changing the intent.",
+    },
+    {
+        "key": "tone",
+        "label": "Adjust tone",
+        "instruction": "Rephrase the text with a friendly, approachable tone that still sounds confident and clear.",
+    },
+    {
+        "key": "bulletize",
+        "label": "Bulletize",
+        "instruction": "Rewrite the content as a concise, well-structured bulleted list summarizing the main points.",
+    },
+]
+
+
 def _ensure_refiner_state() -> None:
-    """Initialize session state keys used by the grammar refiner page."""
+    """Initialize session state keys used by the rewrite refiner page."""
 
     if "refiner_raw_text" not in st.session_state:
-        st.session_state.refiner_raw_text = "Paste or draft your text here for grammar refinement."
-    if "refiner_structured_issues" not in st.session_state:
-        st.session_state.refiner_structured_issues: List[Dict[str, Any]] = []
-    if "refiner_refined_drafts" not in st.session_state:
-        st.session_state.refiner_refined_drafts: List[str] = []
+        st.session_state.refiner_raw_text = "Paste or draft your text here for refinement."
+    if "refiner_candidates" not in st.session_state:
+        st.session_state.refiner_candidates: List[Dict[str, Any]] = []
     if "refiner_history" not in st.session_state:
         st.session_state.refiner_history: List[Dict[str, Any]] = []
+    if "refiner_snippet_text" not in st.session_state:
+        st.session_state.refiner_snippet_text = ""
+    if "refiner_merge_text" not in st.session_state:
+        st.session_state.refiner_merge_text = ""
+    if "refiner_merge_origin" not in st.session_state:
+        st.session_state.refiner_merge_origin = ""
+    if "refiner_merge_sources" not in st.session_state:
+        st.session_state.refiner_merge_sources: List[str] = []
+    if "refiner_focus_prompt" not in st.session_state:
+        st.session_state.refiner_focus_prompt = ""
+    if "refiner_feedback" not in st.session_state:
+        st.session_state.refiner_feedback = ""
 
 
-def _parse_refiner_response(payload: str) -> Dict[str, Any]:
-    """Parse the JSON payload returned by the language model."""
+def _get_preset(preset_key: str) -> Optional[Dict[str, str]]:
+    for preset in REWRITE_PRESETS:
+        if preset["key"] == preset_key:
+            return preset
+    return None
 
-    try:
-        parsed = json.loads(payload)
-    except json.JSONDecodeError:
-        return {
-            "issues": [
-                {
-                    "issue": "Unable to parse model response",
-                    "details": payload.strip() or "The model returned an empty response.",
+
+def _split_sentences(text: str) -> List[str]:
+    stripped = text.strip()
+    if not stripped:
+        return []
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", stripped) if s.strip()]
+    if not sentences:
+        return [stripped]
+    return sentences
+
+
+def _append_history(source_text: str, rewritten_text: str, label: str, focus: str = "") -> None:
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    entry = {
+        "timestamp": timestamp,
+        "label": label,
+        "focus": focus,
+        "source_text": source_text,
+        "rewritten_text": rewritten_text,
+    }
+    st.session_state.refiner_history.insert(0, entry)
+
+
+def _find_candidate(candidate_id: str) -> Optional[Dict[str, Any]]:
+    for candidate in st.session_state.refiner_candidates:
+        if candidate["id"] == candidate_id:
+            return candidate
+    return None
+
+
+def _build_messages(source_text: str, preset: Dict[str, str], focus_prompt: str) -> List[ChatCompletionMessageParam]:
+    focus_suffix = f"\nAdditional guidance: {focus_prompt.strip()}" if focus_prompt and focus_prompt.strip() else ""
+    user_content = (
+        "Rewrite the following text according to the goal. Provide only the rewritten passage without commentary."
+        f"\n\nGoal: {preset['instruction']}{focus_suffix}\n\nText:\n{source_text}"
+    )
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are an expert writing assistant who rewrites content to match a requested style."
+                " Respond only with the fully rewritten text."
+            ),
+        },
+        {"role": "user", "content": user_content},
+    ]
+
+
+def _generate_rewrites(selected_keys: List[str], focus_prompt: str) -> None:
+    source_text = st.session_state.refiner_raw_text
+    st.session_state.refiner_candidates = []
+    st.session_state.refiner_merge_origin = source_text
+    st.session_state.refiner_merge_sources = []
+
+    for preset_key in selected_keys:
+        preset = _get_preset(preset_key)
+        if not preset:
+            continue
+
+        container = st.container()
+        container.markdown(f"#### {preset['label']} (generating…)")
+        stream_placeholder = container.empty()
+
+        try:
+            messages = _build_messages(source_text, preset, focus_prompt)
+            response_generator = openai_api_call(messages, "Normal")  # type: ignore[arg-type]
+            collected_response = ""
+            for chunk in response_generator:
+                collected_response += chunk
+                stream_placeholder.markdown(f"**{preset['label']}**\n\n{collected_response}")
+
+            candidate_text = collected_response.strip()
+            if candidate_text:
+                candidate = {
+                    "id": str(uuid.uuid4()),
+                    "key": preset_key,
+                    "label": preset["label"],
+                    "text": candidate_text,
+                    "source": source_text,
+                    "focus": focus_prompt.strip(),
+                    "generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 }
-            ],
-            "refined_text": "",
-        }
+                st.session_state.refiner_candidates.append(candidate)
+                stream_placeholder.markdown(f"**{preset['label']}**\n\n{candidate_text}")
+            else:
+                stream_placeholder.warning("The model did not return any rewritten text.")
+        except Exception as exc:  # pylint: disable=broad-except
+            stream_placeholder.error(f"Unable to generate rewrite: {exc}")
 
-    issues = parsed.get("issues", [])
-    if not isinstance(issues, list):
-        issues = []
 
-    refined_text = parsed.get("refined_text", "")
-    if not isinstance(refined_text, str):
-        refined_text = ""
+def _add_sentences_to_merge(candidate_id: str, selection_key: str) -> None:
+    candidate = _find_candidate(candidate_id)
+    if not candidate:
+        return
+    selected_sentences = st.session_state.get(selection_key, [])
+    if not selected_sentences:
+        return
 
-    return {"issues": issues, "refined_text": refined_text}
+    additions = "\n".join(selected_sentences)
+    existing = st.session_state.refiner_merge_text.strip()
+    st.session_state.refiner_merge_text = f"{existing}\n{additions}".strip() if existing else additions
+
+    if not st.session_state.refiner_merge_origin:
+        st.session_state.refiner_merge_origin = candidate["source"]
+    if candidate["label"] not in st.session_state.refiner_merge_sources:
+        st.session_state.refiner_merge_sources.append(candidate["label"])
+
+    st.session_state[selection_key] = []
+
+
+def _clear_merge_workspace() -> None:
+    st.session_state.refiner_merge_text = ""
+    st.session_state.refiner_merge_sources = []
+    st.session_state.refiner_merge_origin = st.session_state.refiner_raw_text
+
+
+def _finalize_merge() -> None:
+    merged_text = st.session_state.refiner_merge_text.strip()
+    if not merged_text:
+        return
+
+    source_text = st.session_state.refiner_merge_origin or st.session_state.refiner_raw_text
+    sources = ", ".join(st.session_state.refiner_merge_sources)
+    label = "Merged selection" if not sources else f"Merged selection ({sources})"
+
+    _append_history(source_text, merged_text, label)
+    st.session_state.refiner_raw_text = merged_text
+    st.session_state.refiner_feedback = "Merged rewrite applied to the draft."
+    _clear_merge_workspace()
+    st.rerun()
+
+
+def _accept_candidate(candidate_id: str) -> None:
+    candidate = _find_candidate(candidate_id)
+    if not candidate:
+        return
+
+    _append_history(candidate["source"], candidate["text"], candidate["label"], candidate.get("focus", ""))
+    st.session_state.refiner_raw_text = candidate["text"]
+    st.session_state.refiner_feedback = f"Applied {candidate['label']} rewrite to the draft."
+    _clear_merge_workspace()
+    st.rerun()
 
 
 def grammar_refiner_page() -> None:
-    """Render the grammar refinement interface."""
+    """Render the rewrite refiner interface."""
 
-    st.title("🪄 Grammar Refiner")
+    st.title("🪄 Rewrite Refiner")
     st.write(
-        "Highlight grammar issues, get structured feedback, and iterate on refined drafts without losing your history."
+        "Generate multiple rewrite candidates, review diffs beside your draft, and build custom merges before saving them"
+        " to your session history."
     )
 
     _ensure_refiner_state()
 
-    tab_input, tab_issues, tab_history = st.tabs([
-        "Draft Input",
-        "Grammar Issues",
-        "Refinement History",
-    ])
+    if st.session_state.refiner_feedback:
+        st.success(st.session_state.refiner_feedback)
+        st.session_state.refiner_feedback = ""
 
-    with tab_input:
-        st.caption("Update your draft and run the grammar assistant to review improvements side-by-side.")
-        col_draft, col_refined = st.columns([3, 2])
+    if not st.session_state.refiner_merge_text:
+        st.session_state.refiner_merge_origin = st.session_state.refiner_raw_text
 
-        with col_draft:
+    tab_studio, tab_history = st.tabs(["Rewrite studio", "History"])
+
+    with tab_studio:
+        col_main, col_side = st.columns([3, 2])
+
+        with col_main:
             st.session_state.refiner_raw_text = st.text_area(
-                "Draft Text",
+                "Draft text",
                 value=st.session_state.refiner_raw_text,
-                height=420,
+                height=360,
                 placeholder="Enter the passage you would like Arcana to refine.",
             )
 
-        latest_refined = st.session_state.refiner_refined_drafts[0] if st.session_state.refiner_refined_drafts else ""
-        with col_refined:
-            st.text_area(
-                "Latest Refined Draft",
-                value=latest_refined,
-                height=420,
-                key="refiner_latest_preview",
-                disabled=True,
+            st.session_state.refiner_focus_prompt = st.text_input(
+                "Optional context (tone, audience, key details)",
+                value=st.session_state.refiner_focus_prompt,
+                placeholder="e.g., 'Aim for a confident but friendly voice.'",
             )
 
-        focus_prompt = st.text_input(
-            "Optional focus (tone, style, audience, etc.)",
-            placeholder="e.g., 'Keep the tone formal and highlight sentence clarity.'",
-        )
+            preset_options = [preset["key"] for preset in REWRITE_PRESETS]
+            selected_keys = st.multiselect(
+                "Select rewrite styles",
+                options=preset_options,
+                format_func=lambda key: _get_preset(key)["label"] if _get_preset(key) else key,
+                help="Choose one or more presets to generate multiple candidates at once.",
+            )
 
-        col_actions = st.columns([1, 1, 1])
-        run_disabled = not st.session_state.refiner_raw_text.strip()
-        with col_actions[0]:
-            if st.button("🚀 Analyze & Refine", type="primary", disabled=run_disabled):
-                with st.spinner("Reviewing grammar and drafting improvements..."):
-                    focus_suffix = (
-                        f"\nFocus areas: {focus_prompt.strip()}" if focus_prompt and focus_prompt.strip() else ""
-                    )
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are an expert copy editor. Analyse the provided text, identify grammar-related issues, "
-                                "and provide a refined rewrite. Respond strictly in JSON with keys 'issues' (a list of objects "
-                                "containing 'issue' and 'details') and 'refined_text' (the improved draft)."
-                            ),
-                        },
-                        {
-                            "role": "user",
-                            "content": (
-                                "Here is the text for review:\n" f"{st.session_state.refiner_raw_text}" f"{focus_suffix}"
-                            ),
-                        },
-                    ]
+            run_disabled = not st.session_state.refiner_raw_text.strip() or not selected_keys
+            if st.button("🚀 Generate rewrites", type="primary", disabled=run_disabled):
+                with st.spinner("Streaming rewrites from Arcana…"):
+                    _generate_rewrites(selected_keys, st.session_state.refiner_focus_prompt)
 
-                    try:
-                        response_generator = openai_api_call(messages, "Normal")
-                        response_payload = "".join(list(response_generator))
-                        parsed = _parse_refiner_response(response_payload)
+        with col_side:
+            st.subheader("Snippet clipboard")
+            st.caption("Collect snippets from candidates or jot down your own notes to copy later.")
+            st.text_area(
+                "Snippet clipboard",
+                key="refiner_snippet_text",
+                height=150,
+            )
 
-                        issues = parsed.get("issues", [])
-                        refined_text = parsed.get("refined_text", "")
+            st.subheader("Merge workspace")
+            if st.session_state.refiner_merge_sources:
+                st.caption(
+                    "Sources: " + ", ".join(dict.fromkeys(st.session_state.refiner_merge_sources))
+                )
+            st.text_area(
+                "Merge workspace",
+                key="refiner_merge_text",
+                height=210,
+                help="Add sentences from candidates or type custom edits, then finalize the merge.",
+            )
 
-                        st.session_state.refiner_structured_issues = issues
-                        if refined_text:
-                            st.session_state.refiner_refined_drafts.insert(0, refined_text)
-                            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            history_entry = {
-                                "timestamp": timestamp,
-                                "focus": focus_prompt,
-                                "issues": issues,
-                                "refined_text": refined_text,
-                                "original_text": st.session_state.refiner_raw_text,
-                            }
-                            st.session_state.refiner_history.insert(0, history_entry)
-                        st.success("Grammar review complete! Check the issues and refined draft tabs.")
-                    except Exception as exc:
-                        st.error(f"Unable to refine the text: {exc}")
+            merge_cols = st.columns(2)
+            with merge_cols[0]:
+                st.button(
+                    "✅ Finalize merge",
+                    key="finalize_merge_button",
+                    disabled=not st.session_state.refiner_merge_text.strip(),
+                    on_click=_finalize_merge,
+                )
+            with merge_cols[1]:
+                st.button("🧹 Clear merge", on_click=_clear_merge_workspace)
 
-        with col_actions[1]:
-            if st.button("✅ Use Refined Draft", disabled=not latest_refined):
-                st.session_state.refiner_raw_text = latest_refined
-                st.success("Replaced your draft with the latest refined version.")
-                st.rerun()
+        st.markdown("---")
 
-        with col_actions[2]:
-            if st.button("🧹 Clear History"):
-                st.session_state.refiner_structured_issues = []
-                st.session_state.refiner_refined_drafts = []
-                st.session_state.refiner_history = []
-                st.session_state.refiner_raw_text = ""
-                st.info("Cleared refiner state. Start with a fresh draft.")
-                st.rerun()
-
-    with tab_issues:
-        st.subheader("Identified Grammar Issues")
-        issues = st.session_state.refiner_structured_issues
-        if not issues:
-            st.info("Run the refiner to see grammar feedback here.")
+        st.subheader("Candidate rewrites")
+        if not st.session_state.refiner_candidates:
+            st.info("Select a rewrite style and generate suggestions to compare against your draft.")
         else:
-            for idx, issue in enumerate(issues, start=1):
-                with st.expander(f"Issue {idx}: {issue.get('issue', 'Details')}", expanded=False):
-                    st.write(issue.get("details", "No additional information provided."))
+            for candidate in st.session_state.refiner_candidates:
+                preset = _get_preset(candidate["key"])
+                with st.container():
+                    st.markdown(f"#### {candidate['label']}")
+                    if preset:
+                        st.caption(preset["instruction"])
+                    if candidate.get("focus"):
+                        st.caption(f"Focus: {candidate['focus']}")
+                    st.markdown(
+                        generate_inline_diff_html(candidate["source"], candidate["text"]),
+                        unsafe_allow_html=True,
+                    )
+                    st.text_area(
+                        "Candidate text",
+                        value=candidate["text"],
+                        key=f"candidate_text_{candidate['id']}",
+                        height=220,
+                    )
+
+                    sentences = _split_sentences(candidate["text"])
+                    selection_key = f"merge_select_{candidate['id']}"
+                    if sentences:
+                        st.multiselect(
+                            "Select sentences to add to the merge workspace",
+                            options=sentences,
+                            key=selection_key,
+                        )
+
+                    action_cols = st.columns(3)
+                    with action_cols[0]:
+                        st.button(
+                            "✅ Accept rewrite",
+                            key=f"accept_{candidate['id']}",
+                            on_click=_accept_candidate,
+                            args=(candidate["id"],),
+                        )
+                    with action_cols[1]:
+                        if st.button(
+                            "📋 To clipboard",
+                            key=f"snippet_{candidate['id']}",
+                        ):
+                            st.session_state.refiner_snippet_text = candidate["text"]
+                            st.session_state.refiner_feedback = "Rewrite copied to the snippet clipboard."
+                            st.rerun()
+                    with action_cols[2]:
+                        if sentences and st.button(
+                            "➕ Add to merge",
+                            key=f"merge_{candidate['id']}",
+                        ):
+                            _add_sentences_to_merge(candidate["id"], selection_key)
+                            st.session_state.refiner_feedback = "Selected sentences added to the merge workspace."
+                            st.rerun()
 
     with tab_history:
-        st.subheader("Refinement History")
+        st.subheader("Accepted rewrites")
         if not st.session_state.refiner_history:
-            st.info("No refinements yet. Your history will appear after you run the assistant.")
+            st.info("Accept a rewrite or finalize a merge to build your history.")
         else:
             for entry in st.session_state.refiner_history:
-                with st.expander(f"{entry['timestamp']} — {entry.get('focus') or 'General review'}"):
-                    st.markdown("**Original Draft**")
-                    st.write(entry.get("original_text", ""))
-                    st.markdown("**Refined Draft**")
-                    st.write(entry.get("refined_text", ""))
-                    if entry.get("issues"):
-                        st.markdown("**Issues Addressed**")
-                        for idx, issue in enumerate(entry["issues"], start=1):
-                            st.write(f"{idx}. {issue.get('issue', 'Issue')} - {issue.get('details', '')}")
+                title = f"{entry['timestamp']} — {entry['label']}"
+                with st.expander(title, expanded=False):
+                    if entry.get("focus"):
+                        st.caption(f"Focus: {entry['focus']}")
+                    st.markdown("**Diff vs. original**")
+                    st.markdown(
+                        generate_inline_diff_html(entry["source_text"], entry["rewritten_text"]),
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("**Rewritten text**")
+                    st.write(entry["rewritten_text"])
+                    st.markdown("**Original text**")
+                    st.write(entry["source_text"])
+
