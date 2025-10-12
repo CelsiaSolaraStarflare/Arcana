@@ -10,7 +10,7 @@ from arcana.pages.chatbot import chatbot_page
 from arcana.pages.settings import settings_page
 from arcana.pages.mixup import mixup_page
 from arcana.pages.longresponse import longresponse_page
-from arcana.pages.editor import editor_page
+from arcana.pages.textual_refiner import textual_refiner_page
 from arcana.core.config import APP_TITLE, CACHE_DIR, INDEX_FILE
 from arcana.utils.fiber import FiberDBMS
 
@@ -100,10 +100,10 @@ def citations_page():
 pages = {
     "Introduction": intro_page,
     "Files": files_page,
-    "Citations": citations_page, 
+    "Citations": citations_page,
     "Chatbot": chatbot_page,
     "Mixup": mixup_page,
-    "Editor": editor_page,
+    "Textual Refiner": textual_refiner_page,
     "Long Response": longresponse_page,
     "Settings": settings_page
 }
@@ -125,7 +125,7 @@ st.sidebar.title("Navigation")
 
 # Define the pages
 main_pages = ["Introduction", "Files", "Citations", "Chatbot"]
-advanced_pages = ["Mixup", "Editor", "Long Response"]
+advanced_pages = ["Mixup", "Textual Refiner", "Long Response"]
 
 # Display main page buttons
 for page in main_pages:

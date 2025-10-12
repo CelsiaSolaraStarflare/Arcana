@@ -6,10 +6,14 @@ def apply_theme():
 
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
-    if "refiner_enable_diagnostics" not in st.session_state:
-        st.session_state.refiner_enable_diagnostics = True
-    if "refiner_enable_quality_checks" not in st.session_state:
-        st.session_state.refiner_enable_quality_checks = True
+    if "textual_refiner_enable_diagnostics" not in st.session_state:
+        st.session_state.textual_refiner_enable_diagnostics = st.session_state.get(
+            "refiner_enable_diagnostics", True
+        )
+    if "textual_refiner_enable_quality_checks" not in st.session_state:
+        st.session_state.textual_refiner_enable_quality_checks = st.session_state.get(
+            "refiner_enable_quality_checks", True
+        )
 
     theme_css = """
     <style>
@@ -138,18 +142,18 @@ def settings_page():
     st.info(descriptions.get(st.session_state.theme, ""))
 
     st.markdown("---")
-    st.subheader("Rewrite Refiner")
+    st.subheader("Textual Refiner")
     st.caption(
-        "Control advanced grammar tooling such as the diagnostics dashboard and AI-powered quality reports."
+        "Control diagnostics, quality reports, and AI tooling for the unified Textual Refiner workspace."
     )
     st.checkbox(
         "Enable diagnostics panel",
-        key="refiner_enable_diagnostics",
-        help="Toggle the quality metrics view in the Rewrite Refiner workspace.",
+        key="textual_refiner_enable_diagnostics",
+        help="Toggle the quality metrics view in the Textual Refiner workspace.",
     )
     st.checkbox(
         "Allow AI quality checks",
-        key="refiner_enable_quality_checks",
+        key="textual_refiner_enable_quality_checks",
         help="When enabled, Arcana can run AI-powered grammar and style diagnostics on your draft.",
     )
 
