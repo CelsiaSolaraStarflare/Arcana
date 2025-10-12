@@ -95,7 +95,18 @@ New here? Don't worry, angel! Here's a quick rundown of the key concepts and how
  - Files will appear in the "Finder" section
  - Organize your data and click "Index to Database" to finalize it
  - Once indexing is complete, switch to "IDX" mode in Chatbot to begin querying your data!
+
+🧰 Advanced Tools:
+ - "Mixup" → Spin up slide decks and study docs from your indexed sources
+ - "Editor" → Polish drafts with guided rewriting prompts and inline diffs
+ - "Long Response" → Draft extended essays that stay grounded in your knowledge base
+ - "Grammar Refiner" → Generate multiple rewrites, compare diffs, and export quality reports
 ```
+
+### 🪄 Rewrite Refiner Highlights
+- Stream rewrite candidates side by side, merge your favorite sentences, and keep an audit trail of accepted fixes.
+- Dive into diagnostics for readability, passive voice tracking, and AI-authored quality reviews—toggle these from **Settings ▸ Rewrite Refiner** if you prefer a lighter workspace.
+- Export polished DOCX or Markdown reports that capture your style guides, metrics, and applied changes for easy sharing.
 
 ---
 

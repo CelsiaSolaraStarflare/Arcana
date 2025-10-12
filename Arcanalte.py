@@ -18,6 +18,7 @@ from arcana.pages.settings import settings_page
 from arcana.pages.mixup import mixup_page
 from arcana.pages.longresponse import longresponse_page
 from arcana.pages.editor import editor_page
+from arcana.pages.refiner import grammar_refiner_page
 
 # Import configurations
 from arcana.core.config import APP_TITLE, CACHE_DIR, INDEX_FILE
@@ -85,7 +86,7 @@ st.sidebar.title("Navigation")
 # --- Page Selection Logic ---
 # Define the pages
 main_pages = ["Introduction", "Files", "Citations", "Chatbot"]
-advanced_pages = ["Mixup", "Editor", "Long Response"]
+advanced_pages = ["Mixup", "Editor", "Long Response", "Grammar Refiner"]
 
 # Display main page buttons
 for page in main_pages:
@@ -155,6 +156,7 @@ pages = {
     "Mixup": mixup_page,
     "Editor": editor_page,
     "Long Response": longresponse_page,
+    "Grammar Refiner": grammar_refiner_page,
     "Settings": settings_page
 }
 

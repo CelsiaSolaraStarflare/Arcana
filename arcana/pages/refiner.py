@@ -468,6 +468,9 @@ def grammar_refiner_page() -> None:
     if not st.session_state.refiner_merge_text:
         st.session_state.refiner_merge_origin = st.session_state.refiner_raw_text
 
+    diagnostics_enabled = st.session_state.get("refiner_enable_diagnostics", True)
+    quality_checks_enabled = st.session_state.get("refiner_enable_quality_checks", True)
+
     tab_studio, tab_diagnostics, tab_history = st.tabs(["Rewrite studio", "Diagnostics", "History"])
 
     with tab_studio:
@@ -595,101 +598,107 @@ def grammar_refiner_page() -> None:
                             st.rerun()
 
     with tab_diagnostics:
-        st.subheader("Quality metrics")
-        current_text = st.session_state.refiner_raw_text
-        current_metrics = calculate_text_metrics(current_text)
-
-        last_metrics_dict = st.session_state.get("refiner_last_metrics")
-        prev_metrics_dict = st.session_state.get("refiner_prev_metrics")
-        last_text = st.session_state.get("refiner_last_text")
-
-        previous_dict: Optional[Dict[str, float]] = None
-        if last_metrics_dict is None:
-            previous_dict = None
-        elif current_text != last_text:
-            previous_dict = last_metrics_dict
+        if not diagnostics_enabled:
+            st.info("Enable the diagnostics panel from Settings to view rewrite metrics and exports.")
         else:
-            previous_dict = prev_metrics_dict
+            st.subheader("Quality metrics")
+            current_text = st.session_state.refiner_raw_text
+            current_metrics = calculate_text_metrics(current_text)
 
-        previous_metrics = (
-            TextMetrics.from_dict(previous_dict) if previous_dict else None
-        )
+            last_metrics_dict = st.session_state.get("refiner_last_metrics")
+            prev_metrics_dict = st.session_state.get("refiner_prev_metrics")
+            last_text = st.session_state.get("refiner_last_text")
 
-        metrics_entries = _build_metric_entries(current_metrics, previous_metrics)
+            previous_dict: Optional[Dict[str, float]] = None
+            if last_metrics_dict is None:
+                previous_dict = None
+            elif current_text != last_text:
+                previous_dict = last_metrics_dict
+            else:
+                previous_dict = prev_metrics_dict
 
-        metric_columns = st.columns(2)
-        for index, entry in enumerate(metrics_entries):
-            with metric_columns[index % 2]:
-                st.metric(entry["label"], entry["value"], entry.get("delta"))
+            previous_metrics = (
+                TextMetrics.from_dict(previous_dict) if previous_dict else None
+            )
 
-        st.caption(
-            "Flesch Reading Ease scores range from 0 (difficult) to 100 (very easy)."
-        )
+            metrics_entries = _build_metric_entries(current_metrics, previous_metrics)
 
-        if last_text != current_text:
-            st.session_state.refiner_prev_metrics = last_metrics_dict or current_metrics.to_dict()
-            st.session_state.refiner_last_text = current_text
-        st.session_state.refiner_last_metrics = current_metrics.to_dict()
+            metric_columns = st.columns(2)
+            for index, entry in enumerate(metrics_entries):
+                with metric_columns[index % 2]:
+                    st.metric(entry["label"], entry["value"], entry.get("delta"))
 
-        st.markdown("---")
-        st.subheader("Quality check")
-        check_disabled = not current_text.strip()
-        if st.button("🔍 Run quality check", key="refiner_run_check", disabled=check_disabled):
-            with st.spinner("Reviewing draft against style guides…"):
-                try:
-                    messages = _build_check_messages(current_text)
-                    stream = openai_api_call(messages, "Normal")  # type: ignore[arg-type]
-                    st.session_state.refiner_quality_checks = "".join(list(stream)).strip()
-                except Exception as exc:  # pylint: disable=broad-except
-                    st.error(f"Quality check failed: {exc}")
+            st.caption(
+                "Flesch Reading Ease scores range from 0 (difficult) to 100 (very easy)."
+            )
 
-        if st.session_state.refiner_quality_checks:
-            st.markdown(st.session_state.refiner_quality_checks)
-        else:
-            st.info("Run a quality check to generate an AI-powered diagnostic report.")
+            if last_text != current_text:
+                st.session_state.refiner_prev_metrics = last_metrics_dict or current_metrics.to_dict()
+                st.session_state.refiner_last_text = current_text
+            st.session_state.refiner_last_metrics = current_metrics.to_dict()
 
-        st.markdown("---")
-        st.subheader("Export")
-        st.checkbox(
-            "Include citations for applied fixes",
-            key="refiner_export_include_citations",
-            help="When enabled, applied fixes are labeled as [Fix n] in the export.",
-        )
+            st.markdown("---")
+            st.subheader("Quality check")
+            if not quality_checks_enabled:
+                st.info("Enable AI quality checks from Settings to run grammar diagnostics on demand.")
+            else:
+                check_disabled = not current_text.strip()
+                if st.button("🔍 Run quality check", key="refiner_run_check", disabled=check_disabled):
+                    with st.spinner("Reviewing draft against style guides…"):
+                        try:
+                            messages = _build_check_messages(current_text)
+                            stream = openai_api_call(messages, "Normal")  # type: ignore[arg-type]
+                            st.session_state.refiner_quality_checks = "".join(list(stream)).strip()
+                        except Exception as exc:  # pylint: disable=broad-except
+                            st.error(f"Quality check failed: {exc}")
 
-        style_guides = st.session_state.get("active_style_guides", [])
-        include_citations = st.session_state.refiner_export_include_citations
-        history_entries = st.session_state.get("refiner_history", [])
+                if st.session_state.refiner_quality_checks:
+                    st.markdown(st.session_state.refiner_quality_checks)
+                else:
+                    st.info("Run a quality check to generate an AI-powered diagnostic report.")
 
-        docx_bytes = _create_docx_report(
-            text=current_text,
-            metrics_entries=metrics_entries,
-            quality_check=st.session_state.refiner_quality_checks,
-            style_guides=style_guides,
-            include_citations=include_citations,
-            history=history_entries,
-        )
-        markdown_report = _create_markdown_report(
-            text=current_text,
-            metrics_entries=metrics_entries,
-            quality_check=st.session_state.refiner_quality_checks,
-            style_guides=style_guides,
-            include_citations=include_citations,
-            history=history_entries,
-        )
+            st.markdown("---")
+            st.subheader("Export")
+            st.checkbox(
+                "Include citations for applied fixes",
+                key="refiner_export_include_citations",
+                help="When enabled, applied fixes are labeled as [Fix n] in the export.",
+            )
 
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        st.download_button(
-            "⬇️ Download report (.docx)",
-            data=docx_bytes,
-            file_name=f"arcana_refiner_report_{timestamp}.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
-        st.download_button(
-            "⬇️ Download summary (.md)",
-            data=markdown_report,
-            file_name=f"arcana_refiner_report_{timestamp}.md",
-            mime="text/markdown",
-        )
+            style_guides = st.session_state.get("active_style_guides", [])
+            include_citations = st.session_state.refiner_export_include_citations
+            history_entries = st.session_state.get("refiner_history", [])
+
+            docx_bytes = _create_docx_report(
+                text=current_text,
+                metrics_entries=metrics_entries,
+                quality_check=st.session_state.refiner_quality_checks,
+                style_guides=style_guides,
+                include_citations=include_citations,
+                history=history_entries,
+            )
+            markdown_report = _create_markdown_report(
+                text=current_text,
+                metrics_entries=metrics_entries,
+                quality_check=st.session_state.refiner_quality_checks,
+                style_guides=style_guides,
+                include_citations=include_citations,
+                history=history_entries,
+            )
+
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            st.download_button(
+                "⬇️ Download report (.docx)",
+                data=docx_bytes,
+                file_name=f"arcana_refiner_report_{timestamp}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            st.download_button(
+                "⬇️ Download summary (.md)",
+                data=markdown_report,
+                file_name=f"arcana_refiner_report_{timestamp}.md",
+                mime="text/markdown",
+            )
 
     with tab_history:
         st.subheader("Accepted rewrites")
