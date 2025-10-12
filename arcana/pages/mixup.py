@@ -1,4 +1,4 @@
-# mypy: skip-file
+# mypy: skip-file 
 # flake8: noqa
 import streamlit as st
 import os
