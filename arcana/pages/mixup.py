@@ -8,12 +8,12 @@ import io
 import requests
 
 # Ensure NLTK data is available before importing NLTK functions
-import arcana.utils.nltk_setup
+import arcana.nltk_setup
+from arcana.nltk_setup import safe_word_tokenize as word_tokenize, safe_stopwords as stopwords
 
-from arcana.utils.response import openai_api_call
-from arcana.utils.fiber import FiberDBMS
-from arcana.core.config import GENERATED_FILES_DIR
-from arcana.utils.indexing import extract_keywords, detect_language
+from response import openai_api_call
+from arcana.fiber import FiberDBMS
+from scripts.config import GENERATED_FILES_DIR
 from openai.types.chat import ChatCompletionMessageParam
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -127,7 +127,7 @@ def parse_markdown_inline(text):
         (r'\*\*(.*?)\*\*', 'bold'),      # **bold**
         (r'(?<!\*)\*([^*]+?)\*(?!\*)', 'italic'),  # *italic* (not part of **)
         (r'`(.*?)`', 'code'),            # `code`
-        (r'(?<!_)__(?!_)(.+?)(?<!_)__(?!_)', 'underline'),    # __underline__ (not part of ___)
+        (r'_\_(.*?)__', 'underline'),    # __underline__
         (r'(?<!_)_([^_]+?)_(?!_)', 'italic'),      # _italic_ (not part of __)
         (r'\[(.*?)\]\((.*?)\)', 'link'), # [text](url)
     ]
@@ -416,13 +416,14 @@ def init_study_guide_state(force_reset=False):
 
 def get_context_for_topic(dbms, topic):
     """Extracts keywords from a topic and queries the database for relevant context."""
-    lang = detect_language(topic)
-    keywords = extract_keywords(topic, lang)
-
+    stop_words = set(stopwords('english'))
+    words = word_tokenize(topic)
+    keywords = [word for word in words if word.lower() not in stop_words and word.isalpha()]
+    
     if not keywords:
         return "" # Return empty string if no keywords are found
 
-    results = dbms.query(" ".join(keywords[:10]), top_n=10)
+    results = dbms.query(" ".join(keywords), top_n=10)
     
     if not results:
         return "" # Return empty string if no context is found
@@ -900,20 +901,20 @@ def render_presentation_mode(dbms):
             st.rerun()
 
 def render_study_guide_mode(dbms):
-    st.header("Study Guide Generator")
+    st.header(t("sg_header"))
     init_study_guide_state()
 
     # STEP 1: Get topic, style, and generate outline
     if st.session_state.study_guide_step == "initial":
-        st.subheader("Configure Your Study Guide")
+        st.subheader(t("sg_configure"))
         
         col1, col2 = st.columns([2, 1])
         with col1:
-            topic = st.text_input("Enter the topic for your study guide:", 
-                                placeholder="e.g., Photosynthesis, World War II, Python Programming")
+            topic = st.text_input(t("sg_topic_input"), key="study_guide_topic_input", 
+                                placeholder=t("sg_topic_placeholder"))
         
         with col2:
-            style = st.selectbox("Select Study Guide Style", 
+            style = st.selectbox(t("sg_style"), 
                                ["comprehensive", "summary", "outline", "flashcard_prep", "exam_focused"],
                                format_func=lambda x: x.replace('_', ' ').title(),
                                key="study_guide_style_select")
@@ -934,7 +935,7 @@ def render_study_guide_mode(dbms):
         
         with col1:
             extreme_mode = st.checkbox(
-                "🚀 Enable Extreme Mode", 
+                "🚀 Extreme Mode", 
                 value=False,
                 key="extreme_mode_checkbox",
                 help="⚠️ Extreme Mode uses advanced AI processing for maximum detail and quality but may take up to 10 minutes to generate. Unchecked uses fast mode (IDX) which generates content in under 2 minutes."
@@ -942,7 +943,7 @@ def render_study_guide_mode(dbms):
         
         with col2:
             page_count = st.number_input(
-                "Set Target Page Count", 
+                "📄 Target Pages", 
                 min_value=-1, 
                 max_value=50, 
                 value=-1,
@@ -1368,12 +1369,16 @@ def render_flashcard_mode():
     st.info("💡 **Tip:** For more advanced flashcard features, consider using the Study Guide mode and then creating flashcards from the generated content!")
 
 def mixup_page():
-    st.title("Arcana Mixup")
-    st.write("Create presentations and study guides from your indexed files.")
+    # Initialize language state and render language selector
+    init_language_state()
+    render_language_selector()
+    
+    st.title(t("title"))
+    st.write(t("subtitle"))
 
     # Check if the database is uninitialized or has no indexed entries.
     if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS) or st.session_state.dbms.is_empty():
-        st.info("No files indexed.")
+        st.info(t("no_files_indexed"))
         # If the dbms object doesn't exist at all, create an empty one to prevent errors.
         if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS):
             st.session_state.dbms = FiberDBMS()
@@ -1381,16 +1386,348 @@ def mixup_page():
     dbms = st.session_state.dbms
 
     mode = st.radio(
-        "Choose a generation mode:",
-        ["Presentation", "Study Guide"],
+        t("choose_mode"),
+        [t("presentation"), t("study_guide"), t("flashcards")],
         key='mixup_mode_selector',
         horizontal=True,
     )
     
     st.markdown("---")
 
-    if mode == "Presentation":
+    if mode == t("presentation"):
         render_presentation_mode(dbms)
-    elif mode == "Study Guide":
+    elif mode == t("study_guide"):
         render_study_guide_mode(dbms)
+    elif mode == t("flashcards"):
+        render_flashcard_mode()
 
+# --- Translation System for UI ---
+
+# Supported languages and their translations
+TRANSLATIONS = {
+    "en": {
+        # Main titles and navigation
+        "title": "Arcana Mixup",
+        "subtitle": "Your intelligent assistant for creating documents, presentations, and study materials.",
+        "choose_mode": "Choose a generation mode:",
+        "language_selector": "🌐 Interface Language:",
+        
+        # Mode names
+        "presentation": "Presentation",
+        "study_guide": "Study Guide", 
+        "flashcards": "Q&A Flashcards",
+        
+        # Common buttons
+        "back": "⬅️ Back",
+        "next": "➡️ Next",
+        "generate": "Generate",
+        "download": "⬇️ Download",
+        "create_another": "Create Another",
+        "confirm": "Confirm",
+        "edit": "Edit",
+        
+        # Study Guide specific
+        "sg_header": "📚 Study Guide Generator",
+        "sg_configure": "Step 1: Configure Your Study Guide",
+        "sg_topic_input": "What topic would you like to study?",
+        "sg_topic_placeholder": "e.g., Cell Biology, World War II, Calculus Derivatives",
+        "sg_style": "Study Guide Style:",
+        "sg_generation_options": "⚙️ Generation Options",
+        "sg_extreme_mode": "🚀 Extreme Mode",
+        "sg_target_pages": "📄 Target Pages",
+        "sg_auto_length": "📝 **Auto Length**: AI will determine optimal study guide length based on topic complexity.",
+        "sg_short_guide": "📄 **Short Guide**: ~{} pages • Quick generation • Concise content",
+        "sg_medium_guide": "📄 **Medium Guide**: ~{} pages • Moderate generation time • Balanced detail", 
+        "sg_long_guide": "📄 **Long Guide**: ~{} pages • Extended generation time • Comprehensive detail",
+        "sg_very_long_guide": "📄 **Very Long Guide**: ~{} pages • Very long generation time • Extensive detail",
+        
+        # Presentation specific
+        "ppt_header": "✨ Presentation Generator",
+        "ppt_choose_topic": "Step 1: Choose a Topic",
+        "ppt_topic_input": "What is your presentation about?",
+        
+        # Common messages
+        "no_files_indexed": "No indexed files found. Content will be generated from general knowledge. To use your own documents as context, please go to the 'Files' page and index them first.",
+        "generating": "Generating...",
+        "analyzing": "Analyzing your documents...",
+        "complete": "✅ Complete!",
+        "error": "❌ Error:",
+        
+        # File types
+        "word_document": "📄 Word Document",
+        "powerpoint": "📊 PowerPoint",
+        "text_format": "📋 Text Format",
+    },
+    
+    "es": {
+        # Main titles and navigation
+        "title": "Arcana Mixup",
+        "subtitle": "Tu asistente inteligente para crear documentos, presentaciones y materiales de estudio.",
+        "choose_mode": "Elige un modo de generación:",
+        "language_selector": "🌐 Idioma de Interfaz:",
+        
+        # Mode names
+        "presentation": "Presentación",
+        "study_guide": "Guía de Estudio",
+        "flashcards": "Tarjetas P&R",
+        
+        # Common buttons
+        "back": "⬅️ Atrás",
+        "next": "➡️ Siguiente", 
+        "generate": "Generar",
+        "download": "⬇️ Descargar",
+        "create_another": "Crear Otro",
+        "confirm": "Confirmar",
+        "edit": "Editar",
+        
+        # Study Guide specific
+        "sg_header": "📚 Generador de Guías de Estudio",
+        "sg_configure": "Paso 1: Configura tu Guía de Estudio",
+        "sg_topic_input": "¿Qué tema te gustaría estudiar?",
+        "sg_topic_placeholder": "ej., Biología Celular, Segunda Guerra Mundial, Derivadas de Cálculo",
+        "sg_style": "Estilo de Guía de Estudio:",
+        "sg_generation_options": "⚙️ Opciones de Generación",
+        "sg_extreme_mode": "🚀 Modo Extremo",
+        "sg_target_pages": "📄 Páginas Objetivo",
+        "sg_auto_length": "📝 **Longitud Automática**: La IA determinará la longitud óptima basada en la complejidad del tema.",
+        "sg_short_guide": "📄 **Guía Corta**: ~{} páginas • Generación rápida • Contenido conciso",
+        "sg_medium_guide": "📄 **Guía Media**: ~{} páginas • Tiempo moderado • Detalle equilibrado",
+        "sg_long_guide": "📄 **Guía Larga**: ~{} páginas • Tiempo extendido • Detalle comprensivo",
+        "sg_very_long_guide": "📄 **Guía Muy Larga**: ~{} páginas • Tiempo muy largo • Detalle extensivo",
+        
+        # Presentation specific
+        "ppt_header": "✨ Generador de Presentaciones",
+        "ppt_choose_topic": "Paso 1: Elige un Tema",
+        "ppt_topic_input": "¿De qué trata tu presentación?",
+        
+        # Common messages
+        "no_files_indexed": "No se encontraron archivos indexados. El contenido se generará desde conocimiento general. Para usar tus propios documentos como contexto, ve a la página 'Archivos' e indexa primero.",
+        "generating": "Generando...",
+        "analyzing": "Analizando tus documentos...",
+        "complete": "✅ ¡Completo!",
+        "error": "❌ Error:",
+        
+        # File types
+        "word_document": "📄 Documento Word",
+        "powerpoint": "📊 PowerPoint", 
+        "text_format": "📋 Formato Texto",
+    },
+    
+    "fr": {
+        # Main titles and navigation
+        "title": "Arcana Mixup",
+        "subtitle": "Votre assistant intelligent pour créer des documents, présentations et matériels d'étude.",
+        "choose_mode": "Choisissez un mode de génération:",
+        "language_selector": "🌐 Langue d'Interface:",
+        
+        # Mode names
+        "presentation": "Présentation",
+        "study_guide": "Guide d'Étude",
+        "flashcards": "Cartes Q&R",
+        
+        # Common buttons
+        "back": "⬅️ Retour",
+        "next": "➡️ Suivant",
+        "generate": "Générer",
+        "download": "⬇️ Télécharger",
+        "create_another": "Créer un Autre",
+        "confirm": "Confirmer",
+        "edit": "Modifier",
+        
+        # Study Guide specific
+        "sg_header": "📚 Générateur de Guides d'Étude",
+        "sg_configure": "Étape 1: Configurez votre Guide d'Étude",
+        "sg_topic_input": "Quel sujet aimeriez-vous étudier?",
+        "sg_topic_placeholder": "ex., Biologie Cellulaire, Seconde Guerre Mondiale, Dérivées du Calcul",
+        "sg_style": "Style de Guide d'Étude:",
+        "sg_generation_options": "⚙️ Options de Génération",
+        "sg_extreme_mode": "🚀 Mode Extrême",
+        "sg_target_pages": "📄 Pages Cibles",
+        "sg_auto_length": "📝 **Longueur Automatique**: L'IA déterminera la longueur optimale basée sur la complexité du sujet.",
+        "sg_short_guide": "📄 **Guide Court**: ~{} pages • Génération rapide • Contenu concis",
+        "sg_medium_guide": "📄 **Guide Moyen**: ~{} pages • Temps modéré • Détail équilibré",
+        "sg_long_guide": "📄 **Guide Long**: ~{} pages • Temps étendu • Détail compréhensif",
+        "sg_very_long_guide": "📄 **Guide Très Long**: ~{} pages • Temps très long • Détail extensif",
+        
+        # Presentation specific
+        "ppt_header": "✨ Générateur de Présentations",
+        "ppt_choose_topic": "Étape 1: Choisissez un Sujet",
+        "ppt_topic_input": "De quoi parle votre présentation?",
+        
+        # Common messages
+        "no_files_indexed": "Aucun fichier indexé trouvé. Le contenu sera généré à partir de connaissances générales. Pour utiliser vos propres documents comme contexte, allez à la page 'Fichiers' et indexez d'abord.",
+        "generating": "Génération...",
+        "analyzing": "Analyse de vos documents...",
+        "complete": "✅ Terminé!",
+        "error": "❌ Erreur:",
+        
+        # File types
+        "word_document": "📄 Document Word",
+        "powerpoint": "📊 PowerPoint",
+        "text_format": "📋 Format Texte",
+    },
+    
+    "de": {
+        # Main titles and navigation
+        "title": "Arcana Mixup",
+        "subtitle": "Ihr intelligenter Assistent für das Erstellen von Dokumenten, Präsentationen und Lernmaterialien.",
+        "choose_mode": "Wählen Sie einen Generierungsmodus:",
+        "language_selector": "🌐 Interface-Sprache:",
+        
+        # Mode names
+        "presentation": "Präsentation",
+        "study_guide": "Lernleitfaden",
+        "flashcards": "F&A Karten",
+        
+        # Common buttons
+        "back": "⬅️ Zurück",
+        "next": "➡️ Weiter",
+        "generate": "Generieren",
+        "download": "⬇️ Herunterladen",
+        "create_another": "Weitere Erstellen",
+        "confirm": "Bestätigen",
+        "edit": "Bearbeiten",
+        
+        # Study Guide specific
+        "sg_header": "📚 Lernleitfaden-Generator",
+        "sg_configure": "Schritt 1: Konfigurieren Sie Ihren Lernleitfaden",
+        "sg_topic_input": "Welches Thema möchten Sie studieren?",
+        "sg_topic_placeholder": "z.B., Zellbiologie, Zweiter Weltkrieg, Kalkül-Ableitungen",
+        "sg_style": "Lernleitfaden-Stil:",
+        "sg_generation_options": "⚙️ Generierungsoptionen",
+        "sg_extreme_mode": "🚀 Extremmodus",
+        "sg_target_pages": "📄 Zielseiten",
+        "sg_auto_length": "📝 **Automatische Länge**: KI bestimmt optimale Leitfadenlänge basierend auf Themenkomplexität.",
+        "sg_short_guide": "📄 **Kurzer Leitfaden**: ~{} Seiten • Schnelle Generierung • Prägnanter Inhalt",
+        "sg_medium_guide": "📄 **Mittlerer Leitfaden**: ~{} Seiten • Moderate Zeit • Ausgewogenes Detail",
+        "sg_long_guide": "📄 **Langer Leitfaden**: ~{} Seiten • Erweiterte Zeit • Umfassendes Detail",
+        "sg_very_long_guide": "📄 **Sehr Langer Leitfaden**: ~{} Seiten • Sehr lange Zeit • Extensives Detail",
+        
+        # Presentation specific
+        "ppt_header": "✨ Präsentations-Generator",
+        "ppt_choose_topic": "Schritt 1: Wählen Sie ein Thema",
+        "ppt_topic_input": "Worum geht es in Ihrer Präsentation?",
+        
+        # Common messages
+        "no_files_indexed": "Keine indexierten Dateien gefunden. Inhalt wird aus allgemeinem Wissen generiert. Um Ihre eigenen Dokumente als Kontext zu verwenden, gehen Sie zur 'Dateien'-Seite und indexieren Sie zuerst.",
+        "generating": "Generierung...",
+        "analyzing": "Analysiere Ihre Dokumente...",
+        "complete": "✅ Fertig!",
+        "error": "❌ Fehler:",
+        
+        # File types
+        "word_document": "📄 Word-Dokument",
+        "powerpoint": "📊 PowerPoint",
+        "text_format": "📋 Textformat",
+    },
+    
+    "zh": {
+        # Main titles and navigation
+        "title": "阿卡纳：随笔系统",
+        "subtitle": "您创建文档、演示文稿和学习材料的智能助手。",
+        "choose_mode": "选择生成模式：",
+        "language_selector": "🌐 界面语言：",
+        
+        # Mode names
+        "presentation": "演示文稿",
+        "study_guide": "学习指南",
+        "flashcards": "问答卡片",
+        
+        # Common buttons
+        "back": "⬅️ 返回",
+        "next": "➡️ 下一步",
+        "generate": "生成",
+        "download": "⬇️ 下载",
+        "create_another": "创建另一个",
+        "confirm": "确认",
+        "edit": "编辑",
+        
+        # Study Guide specific
+        "sg_header": "📚 学习指南生成器",
+        "sg_configure": "步骤1：配置您的学习指南",
+        "sg_topic_input": "您想学习什么主题？",
+        "sg_topic_placeholder": "例如：细胞生物学、第二次世界大战、微积分导数",
+        "sg_style": "学习指南风格：",
+        "sg_generation_options": "⚙️ 生成选项",
+        "sg_extreme_mode": "🚀 极限模式",
+        "sg_target_pages": "📄 目标页数",
+        "sg_auto_length": "📝 **自动长度**：AI将根据主题复杂性确定最佳指南长度。",
+        "sg_short_guide": "📄 **简短指南**：~{}页 • 快速生成 • 简洁内容",
+        "sg_medium_guide": "📄 **中等指南**：~{}页 • 适中时间 • 平衡详细",
+        "sg_long_guide": "📄 **长指南**：~{}页 • 扩展时间 • 全面详细",
+        "sg_very_long_guide": "📄 **超长指南**：~{}页 • 很长时间 • 广泛详细",
+        
+        # Presentation specific
+        "ppt_header": "✨ 演示文稿生成器",
+        "ppt_choose_topic": "步骤1：选择主题",
+        "ppt_topic_input": "您的演示文稿是关于什么的？",
+        
+        # Common messages
+        "no_files_indexed": "未找到索引文件。将从一般知识生成内容。要使用您自己的文档作为上下文，请先转到文件页面并建立索引。",
+        "generating": "生成中...",
+        "analyzing": "分析您的文档...",
+        "complete": "✅ 完成！",
+        "error": "❌ 错误：",
+        
+        # File types
+        "word_document": "📄 Word文档",
+        "powerpoint": "📊 PowerPoint",
+        "text_format": "📋 文本格式",
+    }
+}
+
+def get_available_languages():
+    """Returns list of available language codes and names."""
+    return {
+        "en": "English",
+        "es": "Español", 
+        "fr": "Français",
+        "de": "Deutsch",
+        "zh": "中文"
+    }
+
+def init_language_state():
+    """Initialize language selection in session state."""
+    if 'ui_language' not in st.session_state:
+        st.session_state.ui_language = 'en'  # Default to English
+
+def t(key, *args):
+    """
+    Translation function - returns translated text for the current language.
+    Args:
+        key: Translation key
+        *args: Format arguments for strings with placeholders
+    """
+    init_language_state()
+    lang = st.session_state.ui_language
+    
+    # Get translation, fallback to English if not found
+    translation = TRANSLATIONS.get(lang, {}).get(key, TRANSLATIONS["en"].get(key, key))
+    
+    # Format with arguments if provided
+    if args:
+        try:
+            translation = translation.format(*args)
+        except:
+            pass  # If formatting fails, return unformatted string
+    
+    return translation
+
+def render_language_selector():
+    """Renders the language selector in the sidebar."""
+    st.sidebar.markdown("---")
+    
+    languages = get_available_languages()
+    current_lang = st.session_state.get('ui_language', 'en')
+    
+    selected_lang = st.sidebar.selectbox(
+        t("language_selector"),
+        options=list(languages.keys()),
+        format_func=lambda x: f"{languages[x]}",
+        index=list(languages.keys()).index(current_lang),
+        key="language_selector"
+    )
+    
+    if selected_lang != current_lang:
+        st.session_state.ui_language = selected_lang
+        st.rerun()
