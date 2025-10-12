@@ -4,8 +4,10 @@ from typing import Any, Dict, List
 import streamlit as st
 from openai.types.chat import ChatCompletionMessageParam
 
+from arcana.pages.components.style_guides import render_style_guide_controls
 from arcana.utils.diff import generate_inline_diff_html, generate_version_diff_html
 from arcana.utils.response import openai_api_call
+from arcana.utils.style_guides import get_style_guide_rules
 
 
 def editor_page():
@@ -29,6 +31,8 @@ def editor_page():
         st.session_state.version_history = []
     if "pending_revert" not in st.session_state:
         st.session_state.pending_revert = None
+    if "active_style_guides" not in st.session_state:
+        st.session_state.active_style_guides = []
 
     # --- History Tab ---
     with st.expander("📚 Version History", expanded=False):
@@ -107,6 +111,9 @@ def editor_page():
 
     # Column 2: AI Controls and Edited Output
     with col2:
+        active_guides = render_style_guide_controls(context_key="editor")
+        if active_guides:
+            st.caption("Active guides: " + ", ".join(active_guides))
         st.subheader("AI Assistant")
         edit_prompt = st.text_input(
             "Editing Instruction",
@@ -119,14 +126,19 @@ def editor_page():
         if st.button("🚀 Run AI Edit", type="primary", disabled=is_disabled):
             with st.spinner("AI is editing your document... Please wait."):
                 # Construct messages for the API call with the correct type hint
+                style_rules = get_style_guide_rules(st.session_state.get("active_style_guides", []))
+                system_content = (
+                    "You are an expert editor. You will be given a piece of text and an instruction."
+                    " Your task is to rewrite the text based *only* on the instruction. Return nothing but the"
+                    " fully rewritten text, without any introductory phrases like 'Here is the revised text.'"
+                )
+                if style_rules:
+                    system_content += "\nFollow these style guide rules while editing:\n" + style_rules
+
                 messages: List[ChatCompletionMessageParam] = [
                     {
                         "role": "system",
-                        "content": (
-                            "You are an expert editor. You will be given a piece of text and an instruction."
-                            " Your task is to rewrite the text based *only* on the instruction. Return nothing but the"
-                            " fully rewritten text, without any introductory phrases like 'Here is the revised text.'"
-                        ),
+                        "content": system_content,
                     },
                     {
                         "role": "user",

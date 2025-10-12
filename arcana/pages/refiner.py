@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import datetime
+import io
 import re
 import uuid
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
+from docx import Document
 from openai.types.chat import ChatCompletionMessageParam
 
+from arcana.pages.components.style_guides import render_style_guide_controls
 from arcana.utils.diff import generate_inline_diff_html
 from arcana.utils.response import openai_api_call
+from arcana.utils.style_guides import get_style_guide_rules
+from arcana.utils.text_metrics import TextMetrics, calculate_text_metrics
 
 
 REWRITE_PRESETS: List[Dict[str, str]] = [
@@ -64,6 +69,18 @@ def _ensure_refiner_state() -> None:
         st.session_state.refiner_focus_prompt = ""
     if "refiner_feedback" not in st.session_state:
         st.session_state.refiner_feedback = ""
+    if "active_style_guides" not in st.session_state:
+        st.session_state.active_style_guides: List[str] = []
+    if "refiner_quality_checks" not in st.session_state:
+        st.session_state.refiner_quality_checks = ""
+    if "refiner_last_metrics" not in st.session_state:
+        st.session_state.refiner_last_metrics: Optional[Dict[str, float]] = None
+    if "refiner_prev_metrics" not in st.session_state:
+        st.session_state.refiner_prev_metrics: Optional[Dict[str, float]] = None
+    if "refiner_last_text" not in st.session_state:
+        st.session_state.refiner_last_text = st.session_state.refiner_raw_text
+    if "refiner_export_include_citations" not in st.session_state:
+        st.session_state.refiner_export_include_citations = True
 
 
 def _get_preset(preset_key: str) -> Optional[Dict[str, str]]:
@@ -85,14 +102,21 @@ def _split_sentences(text: str) -> List[str]:
 
 def _append_history(source_text: str, rewritten_text: str, label: str, focus: str = "") -> None:
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    source_metrics = calculate_text_metrics(source_text)
+    rewritten_metrics = calculate_text_metrics(rewritten_text)
     entry = {
         "timestamp": timestamp,
         "label": label,
         "focus": focus,
         "source_text": source_text,
         "rewritten_text": rewritten_text,
+        "source_metrics": source_metrics.to_dict(),
+        "metrics": rewritten_metrics.to_dict(),
     }
     st.session_state.refiner_history.insert(0, entry)
+    st.session_state.refiner_prev_metrics = source_metrics.to_dict()
+    st.session_state.refiner_last_metrics = rewritten_metrics.to_dict()
+    st.session_state.refiner_last_text = rewritten_text
 
 
 def _find_candidate(candidate_id: str) -> Optional[Dict[str, Any]]:
@@ -108,16 +132,226 @@ def _build_messages(source_text: str, preset: Dict[str, str], focus_prompt: str)
         "Rewrite the following text according to the goal. Provide only the rewritten passage without commentary."
         f"\n\nGoal: {preset['instruction']}{focus_suffix}\n\nText:\n{source_text}"
     )
+    style_rules = get_style_guide_rules(st.session_state.get("active_style_guides", []))
+    system_content = (
+        "You are an expert writing assistant who rewrites content to match a requested style."
+        " Respond only with the fully rewritten text."
+    )
+    if style_rules:
+        system_content += "\nIncorporate these style guide rules when rewriting:\n" + style_rules
     return [
         {
             "role": "system",
-            "content": (
-                "You are an expert writing assistant who rewrites content to match a requested style."
-                " Respond only with the fully rewritten text."
-            ),
+            "content": system_content,
         },
         {"role": "user", "content": user_content},
     ]
+
+
+def _build_check_messages(text: str) -> List[ChatCompletionMessageParam]:
+    """Compose messages for the quality-check assistant."""
+
+    style_rules = get_style_guide_rules(st.session_state.get("active_style_guides", []))
+    system_prompt = (
+        "You are an editorial quality analyst."
+        " Review drafts for clarity, grammar, tone consistency, and alignment with any supplied style guides."
+        " Respond with a markdown-formatted report using bullet lists and short sections."
+    )
+    if style_rules:
+        system_prompt += "\nRespect the following style guide directives when assessing the text:\n" + style_rules
+
+    user_prompt = (
+        "Assess the following draft. Summarize key strengths, list the most important opportunities"
+        " for improvement, and call out any high-severity issues (grammar, consistency, inclusivity)."
+        " Provide actionable suggestions and reference style guide expectations when relevant."
+        f"\n\nDraft:\n{text}"
+    )
+
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+
+def _build_metric_entries(current: TextMetrics, previous: Optional[TextMetrics]) -> List[Dict[str, Optional[str]]]:
+    """Return formatted metric rows for display and export."""
+
+    entries: List[Dict[str, Optional[str]]] = []
+
+    def delta_str(current_value: float, previous_value: Optional[float], *, precision: int = 0, suffix: str = "") -> Optional[str]:
+        if previous_value is None:
+            return None
+        difference = current_value - previous_value
+        if precision == 0:
+            formatted = f"{difference:+.0f}"
+        else:
+            formatted = f"{difference:+.{precision}f}"
+        return formatted + suffix
+
+    prev_word = previous.word_count if previous else None
+    prev_avg = previous.avg_sentence_length if previous else None
+    prev_flesch = previous.flesch_reading_ease if previous else None
+    prev_passive = previous.passive_voice_ratio if previous else None
+
+    entries.append(
+        {
+            "label": "Word count",
+            "value": str(current.word_count),
+            "delta": delta_str(current.word_count, prev_word),
+        }
+    )
+    entries.append(
+        {
+            "label": "Average sentence length",
+            "value": f"{current.avg_sentence_length:.2f} words",
+            "delta": delta_str(current.avg_sentence_length, prev_avg, precision=2, suffix=" words"),
+        }
+    )
+    entries.append(
+        {
+            "label": "Flesch Reading Ease",
+            "value": f"{current.flesch_reading_ease:.2f}",
+            "delta": delta_str(current.flesch_reading_ease, prev_flesch, precision=2),
+        }
+    )
+    passive_value = f"{current.passive_voice_count} sentences ({current.passive_voice_ratio:.2f}%)"
+    passive_delta = delta_str(current.passive_voice_ratio, prev_passive, precision=2, suffix=" pts")
+    entries.append(
+        {
+            "label": "Passive voice",
+            "value": passive_value,
+            "delta": passive_delta,
+        }
+    )
+
+    return entries
+
+
+def _create_docx_report(
+    *,
+    text: str,
+    metrics_entries: List[Dict[str, Optional[str]]],
+    quality_check: str,
+    style_guides: List[str],
+    include_citations: bool,
+    history: List[Dict[str, Any]],
+) -> bytes:
+    document = Document()
+    document.add_heading("Arcana Rewrite Report", level=1)
+    generated_ts = datetime.datetime.now().strftime("Generated on %Y-%m-%d %H:%M")
+    document.add_paragraph(generated_ts)
+
+    if style_guides:
+        document.add_paragraph("Style guides applied: " + ", ".join(style_guides))
+
+    document.add_heading("Current Draft", level=2)
+    document.add_paragraph(text if text.strip() else "(Draft is currently empty.)")
+
+    document.add_heading("Quality Metrics", level=2)
+    table = document.add_table(rows=1, cols=3)
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = "Metric"
+    hdr_cells[1].text = "Current"
+    hdr_cells[2].text = "Δ"
+    for entry in metrics_entries:
+        row_cells = table.add_row().cells
+        row_cells[0].text = entry["label"]
+        row_cells[1].text = entry["value"]
+        row_cells[2].text = entry.get("delta") or ""
+
+    document.add_heading("Quality Check", level=2)
+    if quality_check and quality_check.strip():
+        for raw_line in quality_check.strip().splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                heading_level = min(line.count("#"), 5)
+                document.add_heading(line.lstrip("# "), level=min(heading_level + 1, 5))
+            elif line.startswith(('- ', '* ')):
+                document.add_paragraph(line[2:].strip(), style="List Bullet")
+            else:
+                document.add_paragraph(line)
+    else:
+        document.add_paragraph("Quality check has not been run yet.")
+
+    document.add_heading("Applied Fixes", level=2)
+    if history:
+        for idx, entry in enumerate(history, start=1):
+            prefix = f"[Fix {idx}] " if include_citations else ""
+            label = entry.get("label", "Unnamed fix")
+            timestamp = entry.get("timestamp", "")
+            focus = entry.get("focus")
+            paragraph = document.add_paragraph(style="List Number")
+            paragraph.add_run(f"{prefix}{label}")
+            if timestamp:
+                paragraph.add_run(f" — {timestamp}")
+            if focus:
+                paragraph.add_run(f" (Focus: {focus})")
+    else:
+        document.add_paragraph("No fixes have been applied yet.")
+
+    buffer = io.BytesIO()
+    document.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _create_markdown_report(
+    *,
+    text: str,
+    metrics_entries: List[Dict[str, Optional[str]]],
+    quality_check: str,
+    style_guides: List[str],
+    include_citations: bool,
+    history: List[Dict[str, Any]],
+) -> str:
+    lines: List[str] = []
+    lines.append("# Arcana Rewrite Report")
+    lines.append("")
+    lines.append(f"_Generated on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}_")
+    if style_guides:
+        lines.append("")
+        lines.append("**Style guides applied:** " + ", ".join(style_guides))
+
+    lines.append("")
+    lines.append("## Current Draft")
+    lines.append("")
+    lines.append(text.strip() or "(Draft is currently empty.)")
+
+    lines.append("")
+    lines.append("## Quality Metrics")
+    lines.append("")
+    lines.append("| Metric | Current | Δ |")
+    lines.append("| --- | --- | --- |")
+    for entry in metrics_entries:
+        delta = entry.get("delta") or ""
+        lines.append(f"| {entry['label']} | {entry['value']} | {delta} |")
+
+    lines.append("")
+    lines.append("## Quality Check")
+    lines.append("")
+    if quality_check and quality_check.strip():
+        lines.append(quality_check.strip())
+    else:
+        lines.append("Quality check has not been run yet.")
+
+    lines.append("")
+    lines.append("## Applied Fixes")
+    lines.append("")
+    if history:
+        for idx, entry in enumerate(history, start=1):
+            prefix = f"[Fix {idx}] " if include_citations else ""
+            label = entry.get("label", "Unnamed fix")
+            timestamp = entry.get("timestamp", "")
+            focus = entry.get("focus")
+            detail = f" — {timestamp}" if timestamp else ""
+            focus_suffix = f" _(Focus: {focus})_" if focus else ""
+            lines.append(f"- {prefix}{label}{detail}{focus_suffix}")
+    else:
+        lines.append("- No fixes have been applied yet.")
+
+    return "\n".join(lines)
 
 
 def _generate_rewrites(selected_keys: List[str], focus_prompt: str) -> None:
@@ -234,7 +468,7 @@ def grammar_refiner_page() -> None:
     if not st.session_state.refiner_merge_text:
         st.session_state.refiner_merge_origin = st.session_state.refiner_raw_text
 
-    tab_studio, tab_history = st.tabs(["Rewrite studio", "History"])
+    tab_studio, tab_diagnostics, tab_history = st.tabs(["Rewrite studio", "Diagnostics", "History"])
 
     with tab_studio:
         col_main, col_side = st.columns([3, 2])
@@ -267,6 +501,9 @@ def grammar_refiner_page() -> None:
                     _generate_rewrites(selected_keys, st.session_state.refiner_focus_prompt)
 
         with col_side:
+            active_guides = render_style_guide_controls(context_key="refiner")
+            if active_guides:
+                st.caption("Active guides: " + ", ".join(active_guides))
             st.subheader("Snippet clipboard")
             st.caption("Collect snippets from candidates or jot down your own notes to copy later.")
             st.text_area(
@@ -356,6 +593,103 @@ def grammar_refiner_page() -> None:
                             _add_sentences_to_merge(candidate["id"], selection_key)
                             st.session_state.refiner_feedback = "Selected sentences added to the merge workspace."
                             st.rerun()
+
+    with tab_diagnostics:
+        st.subheader("Quality metrics")
+        current_text = st.session_state.refiner_raw_text
+        current_metrics = calculate_text_metrics(current_text)
+
+        last_metrics_dict = st.session_state.get("refiner_last_metrics")
+        prev_metrics_dict = st.session_state.get("refiner_prev_metrics")
+        last_text = st.session_state.get("refiner_last_text")
+
+        previous_dict: Optional[Dict[str, float]] = None
+        if last_metrics_dict is None:
+            previous_dict = None
+        elif current_text != last_text:
+            previous_dict = last_metrics_dict
+        else:
+            previous_dict = prev_metrics_dict
+
+        previous_metrics = (
+            TextMetrics.from_dict(previous_dict) if previous_dict else None
+        )
+
+        metrics_entries = _build_metric_entries(current_metrics, previous_metrics)
+
+        metric_columns = st.columns(2)
+        for index, entry in enumerate(metrics_entries):
+            with metric_columns[index % 2]:
+                st.metric(entry["label"], entry["value"], entry.get("delta"))
+
+        st.caption(
+            "Flesch Reading Ease scores range from 0 (difficult) to 100 (very easy)."
+        )
+
+        if last_text != current_text:
+            st.session_state.refiner_prev_metrics = last_metrics_dict or current_metrics.to_dict()
+            st.session_state.refiner_last_text = current_text
+        st.session_state.refiner_last_metrics = current_metrics.to_dict()
+
+        st.markdown("---")
+        st.subheader("Quality check")
+        check_disabled = not current_text.strip()
+        if st.button("🔍 Run quality check", key="refiner_run_check", disabled=check_disabled):
+            with st.spinner("Reviewing draft against style guides…"):
+                try:
+                    messages = _build_check_messages(current_text)
+                    stream = openai_api_call(messages, "Normal")  # type: ignore[arg-type]
+                    st.session_state.refiner_quality_checks = "".join(list(stream)).strip()
+                except Exception as exc:  # pylint: disable=broad-except
+                    st.error(f"Quality check failed: {exc}")
+
+        if st.session_state.refiner_quality_checks:
+            st.markdown(st.session_state.refiner_quality_checks)
+        else:
+            st.info("Run a quality check to generate an AI-powered diagnostic report.")
+
+        st.markdown("---")
+        st.subheader("Export")
+        st.checkbox(
+            "Include citations for applied fixes",
+            key="refiner_export_include_citations",
+            help="When enabled, applied fixes are labeled as [Fix n] in the export.",
+        )
+
+        style_guides = st.session_state.get("active_style_guides", [])
+        include_citations = st.session_state.refiner_export_include_citations
+        history_entries = st.session_state.get("refiner_history", [])
+
+        docx_bytes = _create_docx_report(
+            text=current_text,
+            metrics_entries=metrics_entries,
+            quality_check=st.session_state.refiner_quality_checks,
+            style_guides=style_guides,
+            include_citations=include_citations,
+            history=history_entries,
+        )
+        markdown_report = _create_markdown_report(
+            text=current_text,
+            metrics_entries=metrics_entries,
+            quality_check=st.session_state.refiner_quality_checks,
+            style_guides=style_guides,
+            include_citations=include_citations,
+            history=history_entries,
+        )
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            "⬇️ Download report (.docx)",
+            data=docx_bytes,
+            file_name=f"arcana_refiner_report_{timestamp}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        st.download_button(
+            "⬇️ Download summary (.md)",
+            data=markdown_report,
+            file_name=f"arcana_refiner_report_{timestamp}.md",
+            mime="text/markdown",
+        )
 
     with tab_history:
         st.subheader("Accepted rewrites")
