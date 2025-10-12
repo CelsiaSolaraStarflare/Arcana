@@ -945,81 +945,57 @@ def chatbot_page():
     send_clicked = False
 
     with st.container():
-        st.markdown("<div class=\"arcana-composer\">", unsafe_allow_html=True)
-        st.markdown("<div class=\"composer-label\">Write your command</div>", unsafe_allow_html=True)
         st.text_area(
-            "Chat input",
+            "Message",
             key="chat_text_input",
-            label_visibility="collapsed",
             placeholder="Type your message and press send...",
-            height=140,
+            height=160,
         )
 
-        st.markdown("<div class=\"composer-footer\">", unsafe_allow_html=True)
-        left_col, right_col = st.columns([0.68, 0.32], gap="large")
-
-        with left_col:
-            st.markdown("<div class=\"chip-row\">", unsafe_allow_html=True)
-            st.markdown("<span class=\"chip\">Modes</span>", unsafe_allow_html=True)
-            st.markdown("<span class=\"chip active\">Agent</span>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            controls_cols = st.columns([1.1, 1.1, 1.1], gap="small")
-            with controls_cols[0]:
-                st.markdown("<span class=\"control-label\">Web</span>", unsafe_allow_html=True)
-                web_supplement_enabled = st.toggle(
-                    "Web supplement",
-                    help=(
-                        "When enabled, Arcana fetches public web search results from Bing to"
-                        " supplement your indexed documents."
-                    ),
-                    key="web_supplement_enabled",
-                    label_visibility="collapsed",
-                )
-            with controls_cols[1]:
-                st.markdown("<span class=\"control-label\">Mode</span>", unsafe_allow_html=True)
-                response_type = st.selectbox(
-                    "Assistant mode",
-                    ["Normal", "IDX", "Math", "Reasoning"],
-                    help="""
-                    **Normal**: General conversation with search context
-                    **IDX**: Strictly based on indexed files
-                    **Math**: Specialized for mathematical queries
-                    **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
-                    """,
-                    label_visibility="collapsed",
-                )
-            with controls_cols[2]:
-                st.markdown("<span class=\"control-label\">Agent</span>", unsafe_allow_html=True)
-                agent_mode_enabled = st.toggle(
-                    "Agent mode",
-                    help=(
-                        "When enabled, Arcana summarises relevant documents, synthesises key points,"
-                        " and stores them for future chats before answering."
-                    ),
-                    key="agent_mode_enabled",
-                    label_visibility="collapsed",
-                )
-
-        with right_col:
-            st.markdown("<div class=\"composer-controls\">", unsafe_allow_html=True)
-            send_clicked = st.button(
-                "Send",
-                key="send_button",
-                use_container_width=True,
+        controls_cols = st.columns([2, 1, 1], gap="medium")
+        with controls_cols[0]:
+            response_type = st.selectbox(
+                "Mode",
+                ["Normal", "IDX", "Math", "Reasoning"],
+                help="""
+                **Normal**: General conversation with search context
+                **IDX**: Strictly based on indexed files
+                **Math**: Specialized for mathematical queries
+                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+                """,
             )
-            st.markdown("<div class=\"hint\">Shift + Enter for newline</div>", unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+        with controls_cols[1]:
+            web_supplement_enabled = st.toggle(
+                "Web supplement",
+                help=(
+                    "When enabled, Arcana fetches public web search results from Bing to"
+                    " supplement your indexed documents."
+                ),
+                key="web_supplement_enabled",
+            )
+        with controls_cols[2]:
+            agent_mode_enabled = st.toggle(
+                "Agent mode",
+                help=(
+                    "When enabled, Arcana summarises relevant documents, synthesises key points,"
+                    " and stores them for future chats before answering."
+                ),
+                key="agent_mode_enabled",
+            )
 
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        send_clicked = st.button(
+            "Send",
+            key="send_button",
+            use_container_width=True,
+        )
+        st.caption("Shift + Enter for newline")
 
     user_input = None
     if send_clicked:
         pending_input = st.session_state.get("chat_text_input", "").strip()
         if pending_input:
             user_input = pending_input
-            st.session_state.chat_text_input = ""
+            st.session_state["chat_text_input"] = ""
         else:
             st.warning("Please enter a message before sending.")
 
