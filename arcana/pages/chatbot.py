@@ -656,26 +656,45 @@ def chatbot_page():
         margin-bottom: 8px;
     }
 
-    .arcana-toolbar {
-        background-color: #f9fafb;
+    .arcana-chatbox {
+        background: #f9fafb;
         border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 12px 16px 6px;
-        margin: 16px 0;
+        border-radius: 16px;
+        padding: 16px 20px 12px;
+        margin-top: 20px;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
     }
 
-    .arcana-toolbar .toolbar-title {
+    .arcana-chatbox .toolbar-title {
         font-weight: 600;
         color: #1f2937;
-        font-size: 0.9rem;
-        letter-spacing: 0.04em;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
-        margin-bottom: 0.5rem;
+        margin: 0 0 0.5rem;
     }
 
-    .arcana-toolbar div[data-testid="stHorizontalBlock"] {
-        margin-bottom: 0.2rem;
+    .arcana-chatbox .stTextArea textarea {
+        border-radius: 12px;
+        border-color: #d1d5db;
+        background: #ffffff;
+    }
+
+    .arcana-chatbox .stButton > button {
+        border-radius: 9999px;
+        font-weight: 600;
+    }
+
+    .arcana-chatbox .arcana-toolbar {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 12px 0 0;
+    }
+
+    .arcana-chatbox .arcana-toolbar div[data-testid="stHorizontalBlock"] {
+        margin-bottom: 0.25rem;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -861,11 +880,18 @@ def chatbot_page():
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # User input area
-    user_input = st.chat_input("Ask me anything about your documents...")
+    send_clicked = False
 
-    # Response toolbar directly beneath the input
     with st.container():
+        st.markdown("<div class=\"arcana-chatbox\">", unsafe_allow_html=True)
+        st.text_area(
+            "Chat input",
+            key="chat_text_input",
+            label_visibility="collapsed",
+            placeholder="Ask me anything about your documents...",
+            height=130,
+        )
+
         st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
         st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
         toolbar_cols = st.columns([1.5, 1.5, 1], gap="medium")
@@ -905,6 +931,20 @@ def chatbot_page():
                 label_visibility="collapsed",
             )
         st.markdown("</div>", unsafe_allow_html=True)
+
+        action_cols = st.columns([6, 1])
+        with action_cols[1]:
+            send_clicked = st.button("Send", key="send_button", use_container_width=True, type="primary")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    user_input = None
+    if send_clicked:
+        pending_input = st.session_state.get("chat_text_input", "").strip()
+        if pending_input:
+            user_input = pending_input
+            st.session_state.chat_text_input = ""
+        else:
+            st.warning("Please enter a message before sending.")
 
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
