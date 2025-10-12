@@ -8,8 +8,8 @@ import io
 import requests
 
 # Ensure NLTK data is available before importing NLTK functions
-import arcana.nltk_setup
-from arcana.nltk_setup import safe_word_tokenize as word_tokenize, safe_stopwords as stopwords
+import arcana.utils.nltk_setup
+from arcana.utils.nltk_setup import safe_word_tokenize as word_tokenize, safe_stopwords as stopwords
 
 from arcana.utils.response import openai_api_call
 from arcana.utils.fiber import FiberDBMS
