@@ -20,6 +20,7 @@ import requests
 import xml.etree.ElementTree as ET
 from html import unescape
 from arcana.utils.indexing import extract_keywords, detect_language
+from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
 
 
 BASE_SYSTEM_PROMPT = (
@@ -654,6 +655,28 @@ def chatbot_page():
         color: #374151;
         margin-bottom: 8px;
     }
+
+    .arcana-toolbar {
+        background-color: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 12px 16px 6px;
+        margin: 16px 0;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    .arcana-toolbar .toolbar-title {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.9rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+    }
+
+    .arcana-toolbar div[data-testid="stHorizontalBlock"] {
+        margin-bottom: 0.2rem;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -841,10 +864,13 @@ def chatbot_page():
     # User input area
     user_input = st.chat_input("Ask me anything about your documents...")
 
-    # Response type selector (more compact)
+    # Response toolbar directly beneath the input
     with st.container():
-        col1, col2 = st.columns([3, 1])
-        with col1:
+        st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
+        st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
+        toolbar_cols = st.columns([1.5, 1.5, 1], gap="medium")
+        with toolbar_cols[0]:
+            st.markdown("**Web Search**")
             web_supplement_enabled = st.checkbox(
                 "Web supplement (Bing)",
                 help=(
@@ -852,8 +878,10 @@ def chatbot_page():
                     " supplement your indexed documents."
                 ),
                 key="web_supplement_enabled",
+                label_visibility="collapsed",
             )
-        with col2:
+        with toolbar_cols[1]:
+            st.markdown("**Assistant Mode**")
             response_type = st.selectbox(
                 "Mode",
                 ["Normal", "IDX", "Math", "Reasoning"],
@@ -863,8 +891,20 @@ def chatbot_page():
                 **Math**: Specialized for mathematical queries
                 **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
                 """,
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
+        with toolbar_cols[2]:
+            st.markdown("**Agent Mode**")
+            agent_mode_enabled = st.checkbox(
+                "Agent Mode",
+                help=(
+                    "When enabled, Arcana's agent reads full documents, generates summaries, "
+                    "and stores them for future chats before answering."
+                ),
+                key="agent_mode_enabled",
+                label_visibility="collapsed",
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
@@ -874,14 +914,21 @@ def chatbot_page():
         
         # If a file has NOT been processed, search the database for context.
         # If a file HAS been processed, its context is already in the messages, so we skip this.
+        results: List[dict] = []
+        search_attempts: List[Tuple[str, int]] = []
+        keywords: List[str] = []
+        keyword_generation_raw = ""
+        keyword_source = "n/a"
+        bing_results: List[dict] = []
+        news_sensitive_query = False
+        agent_summary_results: List[AgentSummaryResult] = []
+
         if st.session_state.get('processed_file_name') is None:
             with st.spinner("Searching for relevant information..."):
                 lang = detect_language(user_input)
                 keyword_source = "nltk"
                 keyword_generation_raw = ""
-                bing_results: List[dict] = []
-
-                keywords: List[str] = []
+                keywords = []
                 if response_type == "Normal":
                     gpt_keywords, keyword_generation_raw = generate_keywords_with_gpt(user_input, lang)
                     if gpt_keywords:
@@ -891,8 +938,8 @@ def chatbot_page():
                     keywords = extract_keywords(user_input, lang)
                     keyword_source = "nltk" if keywords else keyword_source
 
-                results: List[dict] = []
-                search_attempts: List[Tuple[str, int]] = []
+                results = []
+                search_attempts = []
                 if keywords:
                     if keyword_source == "language_model":
                         results, search_attempts = query_dbms_with_keywords(dbms, keywords)
@@ -933,6 +980,22 @@ def chatbot_page():
                         "Raw keyword suggestion response: " + keyword_generation_raw
                     )
 
+                if agent_mode_enabled:
+                    target_files = _unique_preserve_order(
+                        result.get("name") for result in results if result.get("name")
+                    )
+                    if target_files:
+                        with st.spinner("🧠 Agent is summarizing documents..."):
+                            agent = get_document_agent()
+                            for file_name in target_files:
+                                summary_result = agent.summarise_document(file_name, dbms)
+                                if summary_result.summary_text:
+                                    agent_summary_results.append(summary_result)
+                                elif summary_result.reason:
+                                    st.warning(f"Agent could not summarise {file_name}: {summary_result.reason}")
+                    elif keywords:
+                        st.info("Agent mode enabled, but no documents were retrieved to summarise.")
+
                 if web_supplement_enabled:
                     assistant_reply_lines.append(
                         "When citing information from web supplements, format the citation as a Markdown link like `[Title](URL)` and include it in the final 'Sources:' line."
@@ -954,6 +1017,20 @@ def chatbot_page():
                             "Bing web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
                         )
 
+                if agent_mode_enabled:
+                    if agent_summary_results:
+                        assistant_reply_lines.append(
+                            "Agent analysed the full documents listed below. Use their summaries in the following context and cite the original file names."
+                        )
+                        for summary in agent_summary_results:
+                            assistant_reply_lines.append(
+                                f"- `{summary.file_name}` (summary stored as `{summary.summary_name}`)"
+                            )
+                    else:
+                        assistant_reply_lines.append(
+                            "Agent mode is enabled, but no summaries were available for this query."
+                        )
+
                 assistant_reply = "\n".join(assistant_reply_lines) + "\n\n"
 
                 if results:
@@ -973,12 +1050,57 @@ def chatbot_page():
                         "enough to search the documents."
                     )
 
+                if agent_summary_results:
+                    assistant_reply += "\nAgent-generated document overviews:\n\n"
+                    for summary in agent_summary_results:
+                        assistant_reply += f"### Agent summary for `{summary.file_name}`\n{summary.summary_text}\n\n"
+
                 assistant_reply += (
                     "\nAlways end the final response with a 'Sources:' line listing every citation or 'Sources: No sources cited.'"
                 )
 
-                st.session_state.pending_sources_default = _build_sources_default_line(results, bing_results)
+                combined_results = list(results)
+                if agent_summary_results:
+                    combined_results.extend(
+                        {
+                            "name": summary.summary_name or f"{summary.file_name} (agent summary)",
+                            "content": summary.summary_text,
+                        }
+                        for summary in agent_summary_results
+                    )
+
+                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, bing_results)
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
+        else:
+            if agent_mode_enabled and st.session_state.get('processed_file_name'):
+                processed_name = st.session_state['processed_file_name']
+                with st.spinner("🧠 Agent is summarizing the uploaded file..."):
+                    agent = get_document_agent()
+                    summary_result = agent.summarise_document(processed_name, dbms)
+                if summary_result.summary_text:
+                    agent_summary_results.append(summary_result)
+                    if summary_result.created:
+                        st.success(f"Agent summary saved for {processed_name}.")
+                elif summary_result.reason:
+                    st.warning(f"Agent could not summarise {processed_name}: {summary_result.reason}")
+
+            if agent_summary_results:
+                summary_context_lines = [
+                    "AGENT SUMMARY CONTEXT (uploaded file):",
+                    "The agent analysed the active uploaded file and produced the summary below. Use it while answering and cite the original document name.",
+                ]
+                for summary in agent_summary_results:
+                    summary_context_lines.append(f"### Agent summary for `{summary.file_name}`\n{summary.summary_text}")
+                st.session_state.messages.append({"role": "system", "content": "\n\n".join(summary_context_lines)})
+
+                combined_results = [
+                    {
+                        "name": summary.summary_name or f"{summary.file_name} (agent summary)",
+                        "content": summary.summary_text,
+                    }
+                    for summary in agent_summary_results
+                ]
+                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, [])
 
         with st.spinner("Arcana is thinking..."):
             try:
