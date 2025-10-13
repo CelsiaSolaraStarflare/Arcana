@@ -34,6 +34,7 @@ class AgentSummaryResult:
     summary_path: Optional[Path] = None
     created: bool = False
     reason: Optional[str] = None
+    citation_path: Optional[str] = None
 
     @property
     def summary_name(self) -> Optional[str]:
@@ -75,6 +76,7 @@ class DocumentAgent:
                 summary_text=summary_text,
                 summary_path=summary_path,
                 created=False,
+                citation_path=str(summary_path.relative_to(self.cache_dir)),
             )
         else:
             full_content = self._read_file_text(source_path)
@@ -97,6 +99,7 @@ class DocumentAgent:
                 summary_text=summary_text,
                 summary_path=summary_path,
                 created=True,
+                citation_path=str(summary_path.relative_to(self.cache_dir)),
             )
 
         self._ensure_summary_indexed(result, dbms)
@@ -106,9 +109,28 @@ class DocumentAgent:
     # Internal helpers
     # ------------------------------------------------------------------
     def _locate_file(self, file_name: str) -> Optional[Path]:
-        """Search ``CACHE_DIR`` for a file that matches ``file_name``."""
+        """Search ``CACHE_DIR`` for a file that matches ``file_name``.
 
-        target_name = Path(file_name).name
+        The lookup prefers an exact relative path match so that citations can
+        reference nested directory structures. If that fails, the legacy
+        basename search is used as a fallback for backwards compatibility.
+        """
+
+        if not file_name:
+            return None
+
+        candidate = Path(file_name)
+        # Accept absolute paths that already point to a cached file.
+        if candidate.is_absolute() and candidate.exists():
+            return candidate
+
+        # Attempt to resolve the file relative to the cache directory to
+        # support nested paths stored in the search index.
+        relative_candidate = self.cache_dir / candidate
+        if relative_candidate.exists():
+            return relative_candidate
+
+        target_name = candidate.name
         for root, _, files in os.walk(self.cache_dir):
             if target_name in files:
                 return Path(root) / target_name
