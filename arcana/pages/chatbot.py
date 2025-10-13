@@ -10,7 +10,9 @@ import os
 import json
 import datetime
 import re
-from typing import Iterable, List, Tuple
+from datetime import date
+from pathlib import Path
+from typing import Iterable, List, Optional, Tuple
 from docx import Document
 from pptx import Presentation
 import chardet
@@ -26,14 +28,15 @@ from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
 BASE_SYSTEM_PROMPT = (
     "You are a helpful AI assistant named Arcana. You will be provided with search results "
     "from a user's documents and, when enabled, web supplements. Prioritize the provided "
-    "document snippets for answers and cite the source document's name for information "
-    "taken from them, like this: `(Source: document_name.pdf)`. If the provided text does "
-    "not contain the answer but the question involves widely known general knowledge, "
-    "answer accurately using your own knowledge. When web supplement results are provided, "
-    "you may incorporate them and cite the corresponding URLs. Always conclude your reply "
-    "with a line that begins with `Sources:` followed by a comma-separated list of the "
-    "sources you used. If you had to rely solely on general knowledge and no citations are "
-    "available, end with `Sources: No sources cited.` Be friendly, cute, and helpful."
+    "document snippets for answers and cite the source document's full relative path using "
+    "MLA-style citations, for example: “Guide.” subject/guide.pdf. PDF file. If the provided "
+    "text does not contain the answer but the question involves widely known general "
+    "knowledge, answer accurately using your own knowledge. When web supplement results are "
+    "provided, you may incorporate them but still cite the full URL using MLA conventions "
+    "with an access date. Always conclude your reply with a line that begins with `Sources:` "
+    "followed by a comma-separated list of the sources you used. If you had to rely solely on "
+    "general knowledge and no citations are available, end with `Sources: No sources cited.` "
+    "Be friendly, cute, and helpful."
 )
 
 
@@ -200,39 +203,106 @@ def search_bing(query: str, max_results: int = 3) -> List[dict]:
 def _build_sources_default_line(doc_results: Iterable[dict], web_results: Iterable[dict]) -> str:
     """Build a fallback `Sources:` line based on available document and web snippets."""
 
+    today = date.today()
+    accessed_date = _format_access_date(today)
+
+    def _format_local_source(result: dict) -> str:
+        raw_name = result.get("name")
+        if not raw_name:
+            return ""
+
+        name = str(raw_name).strip()
+        if not name:
+            return ""
+
+        path_candidate = str(result.get("citation_path") or name).strip()
+        if not path_candidate:
+            path_candidate = name
+
+        path_text = path_candidate.replace("\\", "/")
+        # Prefer a cleaned path representation when the entry looks like a stored file path.
+        if "/" in path_text or Path(path_text).suffix:
+            path_display = path_text
+        else:
+            path_display = path_text
+
+        clean_title = _derive_title_from_name(path_candidate)
+        descriptor = _describe_format(name, path_candidate)
+
+        return f"“{clean_title}.” {path_display}. {descriptor}."
+
     def _format_web_source(result: dict) -> str:
         link = (result.get("link") or "").strip()
         if not link:
             return ""
 
         title = (result.get("title") or "").strip()
-        if title:
-            safe_title = re.sub(r"\s+", " ", title).strip()
-            safe_title = safe_title.replace("[", "(").replace("]", ")")
-            return f"[{safe_title}]({link})"
+        safe_title = re.sub(r"\s+", " ", title).strip()
+        safe_title = safe_title.replace("[", "(").replace("]", ")")
 
-        return link
+        if safe_title:
+            return f"“{safe_title}.” {link}. Accessed {accessed_date}."
+        return f"{link}. Accessed {accessed_date}."
 
-    doc_names: List[str] = []
+    doc_citations: List[str] = []
     for result in doc_results:
-        raw_name = result.get("name")
-        if not raw_name:
-            continue
-        name = str(raw_name).strip()
-        if not name:
-            continue
-        doc_names.append(f"{name} (Local)")
-    web_sources: List[str] = []
+        formatted = _format_local_source(result)
+        if formatted:
+            doc_citations.append(formatted)
+
+    web_citations: List[str] = []
     for result in web_results:
         formatted = _format_web_source(result)
         if formatted:
-            web_sources.append(f"{formatted} (Web)")
+            web_citations.append(formatted)
 
-    ordered_sources = _unique_preserve_order([*doc_names, *web_sources])
+    ordered_sources = _unique_preserve_order([*doc_citations, *web_citations])
     if not ordered_sources:
         return "Sources: No sources cited."
 
     return "Sources: " + ", ".join(ordered_sources)
+
+
+def _format_access_date(day: date) -> str:
+    month_name = day.strftime("%B")
+    day_number = day.strftime("%d").lstrip("0") or day.strftime("%d")
+    return f"{day_number} {month_name} {day.year}"
+
+
+def _derive_title_from_name(raw_name: str) -> str:
+    cleaned = re.sub(r"\s*\(agent summary\)\s*$", "", raw_name, flags=re.IGNORECASE)
+    path = Path(cleaned)
+    stem = path.stem or cleaned
+    if not stem:
+        return "Document"
+
+    spaced = re.sub(r"[_\-]+", " ", stem).strip()
+    if not spaced:
+        spaced = stem.strip()
+
+    title = spaced.title()
+    return title or "Document"
+
+
+def _describe_format(raw_name: str, path_hint: Optional[str] = None) -> str:
+    candidate = path_hint or raw_name
+    lowered = candidate.lower()
+    if "agent summary" in lowered or "agent summary" in raw_name.lower():
+        return "Agent-generated summary"
+
+    suffix = Path(candidate).suffix.lower().lstrip(".")
+    format_map = {
+        "pdf": "PDF file",
+        "docx": "Word document",
+        "pptx": "PowerPoint presentation",
+        "txt": "Text file",
+        "csv": "CSV file",
+        "xls": "Excel workbook",
+        "xlsx": "Excel workbook",
+        "md": "Markdown document",
+    }
+
+    return format_map.get(suffix, "Document")
 
 
 def _ensure_sources_line(response_text: str, default_line: str) -> str:
@@ -965,6 +1035,10 @@ def chatbot_page():
                     f"Keyword generation method: {keyword_source}",
                 ]
 
+                assistant_reply_lines.append(
+                    "Use MLA-style citations that include each document's full relative path (e.g., “Guide.” subject/guide.pdf. PDF file.)."
+                )
+
                 if keywords:
                     assistant_reply_lines.append(
                         "Keywords considered: " + ", ".join(keywords[:20])
@@ -998,7 +1072,7 @@ def chatbot_page():
 
                 if web_supplement_enabled:
                     assistant_reply_lines.append(
-                        "When citing information from web supplements, format the citation as a Markdown link like `[Title](URL)` and include it in the final 'Sources:' line."
+                        "When citing web supplements, follow MLA style with the full URL and an access date."
                     )
                     if news_sensitive_query:
                         assistant_reply_lines.append(
@@ -1065,6 +1139,7 @@ def chatbot_page():
                         {
                             "name": summary.summary_name or f"{summary.file_name} (agent summary)",
                             "content": summary.summary_text,
+                            "citation_path": summary.citation_path,
                         }
                         for summary in agent_summary_results
                     )
@@ -1087,7 +1162,7 @@ def chatbot_page():
             if agent_summary_results:
                 summary_context_lines = [
                     "AGENT SUMMARY CONTEXT (uploaded file):",
-                    "The agent analysed the active uploaded file and produced the summary below. Use it while answering and cite the original document name.",
+                    "The agent analysed the active uploaded file and produced the summary below. Use it while answering and cite the document's full relative path.",
                 ]
                 for summary in agent_summary_results:
                     summary_context_lines.append(f"### Agent summary for `{summary.file_name}`\n{summary.summary_text}")
@@ -1097,6 +1172,7 @@ def chatbot_page():
                     {
                         "name": summary.summary_name or f"{summary.file_name} (agent summary)",
                         "content": summary.summary_text,
+                        "citation_path": summary.citation_path,
                     }
                     for summary in agent_summary_results
                 ]
