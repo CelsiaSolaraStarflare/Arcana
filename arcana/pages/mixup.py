@@ -7,6 +7,8 @@ import re
 import io
 import json
 import csv
+import base64
+import mimetypes
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 import requests
@@ -24,8 +26,13 @@ from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.enum.text import MSO_AUTO_SIZE
 from docx import Document
-from docx.shared import Pt as DocxPt, RGBColor as DocxRGBColor
+from docx.shared import Pt as DocxPt, RGBColor as DocxRGBColor, Inches as DocxInches
 from docx.enum.text import WD_ALIGN_PARAGRAPH  # type: ignore
+
+import dashscope
+from dashscope import MultiModalConversation
+
+dashscope.base_http_api_url = "https://dashscope.aliyuncs.com/api/v1"
 
 # --- Flashcard Utilities ---
 
@@ -928,7 +935,325 @@ def add_formatted_text_to_shape(shape, text: str):
 
 # --- Document Generation ---
 
-def create_presentation_from_content(presentation_content, topic, api_key):
+
+def _safe_slug(value: str, max_length: int = 40) -> str:
+    """Return a filesystem-safe slug derived from the provided text."""
+
+    cleaned = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
+    if not cleaned:
+        cleaned = "image"
+    if len(cleaned) > max_length:
+        return cleaned[:max_length]
+    return cleaned
+
+
+def parse_image_directive(line: str) -> tuple[str | None, str | None, bool]:
+    """Parse an image directive line and return the prompt, caption, and match flag."""
+
+    stripped = line.strip()
+    if not stripped.lower().startswith("[image"):
+        return None, None, False
+
+    prompt = ""
+    caption = ""
+
+    match = re.match(r"^\[image(?::|\s)?([^\]]*)\]\s*(.*)$", stripped, re.I)
+    if match:
+        inside = match.group(1).strip()
+        trailing = match.group(2).strip()
+        prompt = inside or trailing
+        caption = trailing or inside
+    elif stripped.lower().startswith("[image]"):
+        trailing = stripped[len("[image]") :].strip()
+        prompt = trailing
+        caption = trailing
+    else:
+        prompt = stripped.strip("[]")[5:].strip(":").strip()
+        caption = prompt
+
+    prompt = prompt or None
+    caption = caption or None
+    return prompt, caption, True
+
+
+def split_text_and_image_prompts(text: str) -> tuple[str, list[tuple[str, str | None]]]:
+    """Separate text content from image directives within the provided text."""
+
+    content_lines: list[str] = []
+    image_prompts: list[tuple[str, str | None]] = []
+
+    for line in text.splitlines():
+        prompt, caption, is_directive = parse_image_directive(line)
+        if is_directive:
+            image_prompts.append((prompt, caption))
+        else:
+            content_lines.append(line)
+
+    cleaned_text = "\n".join(content_lines)
+    return cleaned_text, image_prompts
+
+
+def _ensure_image_output_dir() -> str:
+    """Ensure the Mixup image output directory exists and return its path."""
+
+    images_dir = os.path.join(GENERATED_FILES_DIR, "images")
+    os.makedirs(images_dir, exist_ok=True)
+    return images_dir
+
+
+def _download_image_from_url(url: str, slug: str) -> str | None:
+    """Download an image from the given URL into the generated files directory."""
+
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+    except Exception as exc:  # pragma: no cover - network errors are environment-specific
+        st.warning(f"Could not download generated image from {url}: {exc}")
+        return None
+
+    content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
+    extension = mimetypes.guess_extension(content_type) or ".png"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"mixup_{slug}_{timestamp}{extension}"
+    output_dir = _ensure_image_output_dir()
+    file_path = os.path.join(output_dir, filename)
+    with open(file_path, "wb") as image_file:
+        image_file.write(response.content)
+    return file_path
+
+
+def _save_image_payload(payload: object, prompt: str) -> str | None:
+    """Persist an image payload (URL or base64 data) and return the saved path."""
+
+    slug = _safe_slug(prompt)
+    if isinstance(payload, str):
+        if payload.startswith("http"):
+            return _download_image_from_url(payload, slug)
+        try:
+            data = base64.b64decode(payload)
+        except Exception:  # pragma: no cover - depends on payload format
+            return None
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"mixup_{slug}_{timestamp}.png"
+        output_dir = _ensure_image_output_dir()
+        file_path = os.path.join(output_dir, filename)
+        with open(file_path, "wb") as image_file:
+            image_file.write(data)
+        return file_path
+
+    if isinstance(payload, dict):
+        url_like = payload.get("url") or payload.get("image_url")
+        if isinstance(url_like, str) and url_like:
+            return _download_image_from_url(url_like, slug)
+        b64_data = payload.get("b64_json") or payload.get("data")
+        if isinstance(b64_data, str) and b64_data:
+            try:
+                data = base64.b64decode(b64_data)
+            except Exception:  # pragma: no cover - depends on payload format
+                return None
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"mixup_{slug}_{timestamp}.png"
+            output_dir = _ensure_image_output_dir()
+            file_path = os.path.join(output_dir, filename)
+            with open(file_path, "wb") as image_file:
+                image_file.write(data)
+            return file_path
+
+    return None
+
+
+def _extract_image_payloads(response: object) -> list[object]:
+    """Extract potential image payloads from a DashScope response."""
+
+    payloads: list[object] = []
+    if response is None:
+        return payloads
+
+    output = None
+    if isinstance(response, dict):
+        output = response.get("output")
+    else:
+        output = getattr(response, "output", None)
+
+    if output is None:
+        return payloads
+
+    if isinstance(output, dict):
+        choices = output.get("choices", [])
+    else:
+        choices = getattr(output, "choices", []) or []
+
+    for choice in choices:
+        message = None
+        if isinstance(choice, dict):
+            message = choice.get("message")
+        else:
+            message = getattr(choice, "message", None)
+        if message is None:
+            continue
+
+        if isinstance(message, dict):
+            content = message.get("content")
+        else:
+            content = getattr(message, "content", None)
+
+        if content is None:
+            continue
+
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    if "image" in item and item["image"]:
+                        payloads.append(item["image"])
+                    elif "image_url" in item and item["image_url"]:
+                        payloads.append(item["image_url"])
+                    elif item.get("type", "").lower() == "image" and item.get("url"):
+                        payloads.append(item["url"])
+                    elif "data" in item and item["data"]:
+                        payloads.append(item["data"])
+                elif isinstance(item, str):
+                    payloads.append(item)
+        else:
+            payloads.append(content)
+
+    return payloads
+
+
+def generate_reference_image(prompt: str, api_key: str, size: str = "1328*1328") -> str | None:
+    """Generate an illustrative image using DashScope and return its local path."""
+
+    normalized_prompt = prompt.strip()
+    if not normalized_prompt:
+        return None
+
+    if not api_key:
+        st.warning("Set the DASHSCOPE_API_KEY environment variable to enable image generation.")
+        return None
+
+    try:
+        dashscope.api_key = api_key
+        response = MultiModalConversation.call(
+            api_key=api_key,
+            model="qwen-image-plus",
+            messages=[{"role": "user", "content": [{"text": normalized_prompt}]}],
+            result_format="message",
+            stream=False,
+            watermark=False,
+            prompt_extend=True,
+            negative_prompt="",
+            size=size,
+        )
+    except Exception as exc:  # pragma: no cover - depends on external service
+        st.error(f"Image generation failed for '{normalized_prompt}': {exc}")
+        return None
+
+    status_code = getattr(response, "status_code", None)
+    if status_code != 200:
+        message = getattr(response, "message", "Image generation request failed.")
+        st.error(f"Image generation failed for '{normalized_prompt}': {message}")
+        return None
+
+    payloads = _extract_image_payloads(response)
+    for payload in payloads:
+        path = _save_image_payload(payload, normalized_prompt)
+        if path:
+            return path
+
+    st.error(f"Image generation returned no usable content for '{normalized_prompt}'.")
+    return None
+
+
+def ensure_image_for_prompt(prompt: str, api_key: str, cache: dict[str, str]) -> str | None:
+    """Return a cached or newly generated image path for the given prompt."""
+
+    key = prompt.strip()
+    if not key:
+        return None
+    if key in cache:
+        return cache[key]
+
+    image_path = generate_reference_image(key, api_key)
+    if image_path:
+        cache[key] = image_path
+    return image_path
+
+
+def add_image_to_slide(slide, prs, content_shape, image_path: str, caption: str | None = None) -> None:
+    """Add an image (and optional caption) beneath the main content placeholder."""
+
+    try:
+        # Reduce the content area height to make room for the image.
+        content_shape.height = int(prs.slide_height * 0.45)
+    except Exception:
+        pass
+
+    image_left = Inches(0.75)
+    image_top = content_shape.top + content_shape.height + Inches(0.2)
+    available_width = prs.slide_width - Inches(1.5)
+    available_height = prs.slide_height - image_top - Inches(1.0)
+
+    picture = slide.shapes.add_picture(image_path, image_left, image_top)
+    scale = 1.0
+    if picture.width > available_width:
+        scale = min(scale, available_width / picture.width)
+    if picture.height > available_height and available_height > 0:
+        scale = min(scale, available_height / picture.height)
+    if scale < 1.0:
+        picture.width = int(picture.width * scale)
+        picture.height = int(picture.height * scale)
+
+    # Center the picture horizontally within the slide.
+    picture.left = int((prs.slide_width - picture.width) / 2)
+
+    if caption:
+        caption_top = picture.top + picture.height + Inches(0.1)
+        if caption_top + Inches(0.4) < prs.slide_height:
+            caption_box = slide.shapes.add_textbox(Inches(0.75), caption_top, prs.slide_width - Inches(1.5), Inches(0.6))
+            caption_tf = caption_box.text_frame
+            caption_tf.clear()
+            paragraph = caption_tf.paragraphs[0]
+            paragraph.text = caption
+            paragraph.font.size = Pt(14)
+            paragraph.font.italic = True
+            paragraph.alignment = PP_ALIGN.CENTER
+
+
+def add_image_to_document(doc: Document, image_path: str, caption: str | None = None) -> None:
+    """Insert an image and optional caption into a Word document."""
+
+    picture = doc.add_picture(image_path, width=DocxInches(5.5))
+    last_paragraph = doc.paragraphs[-1]
+    last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    if caption:
+        caption_paragraph = doc.add_paragraph(caption)
+        caption_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        if caption_paragraph.runs:
+            caption_paragraph.runs[0].italic = True
+
+
+def add_image_placeholder_to_document(doc: Document, caption: str) -> None:
+    """Add a textual placeholder when an image could not be generated."""
+
+    paragraph = doc.add_paragraph(f"[Image placeholder: {caption}]")
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    if paragraph.runs:
+        paragraph.runs[0].italic = True
+
+
+def add_image_placeholder_to_slide(content_shape, caption: str) -> None:
+    """Add a textual placeholder bullet to a slide when no image was generated."""
+
+    try:
+        tf = content_shape.text_frame
+    except AttributeError:
+        return
+    placeholder = tf.add_paragraph()
+    placeholder.text = f"[Image placeholder: {caption}]"
+    placeholder.font.italic = True
+
+
+def create_presentation_from_content(presentation_content, topic, api_key, image_cache: dict[str, str] | None = None):
     """Creates a PowerPoint presentation from a list of slide content, including images."""
     # Load template if available (located in plugin/templates/template.pptx)
     template_path = os.path.join(os.path.dirname(__file__), 'templates', 'template.pptx')
@@ -938,6 +1263,8 @@ def create_presentation_from_content(presentation_content, topic, api_key):
         prs = Presentation()
     # Use built-in Title and Content slide layout for consistent formatting
     content_slide_layout = prs.slide_layouts[1]
+
+    image_cache = image_cache or {}
 
     # Create slides using the selected layout
     for idx, slide_data in enumerate(presentation_content, start=1):
@@ -951,17 +1278,30 @@ def create_presentation_from_content(presentation_content, topic, api_key):
 
         # Parse and separate main content and speaker notes
         content_lines, notes_lines = split_content_and_notes(slide_data['content'], slide_data['title'])
-        # Remove duplicate title lines
-        content_lines = [l for l in content_lines if l.strip() and l.strip() != slide_data['title']]
-        # Remove image tags
-        content_lines = [l for l in content_lines if not l.startswith('[image]')]
-        text_content = "\n".join(content_lines)
+        content_text = "\n".join(content_lines)
+        cleaned_text, image_prompts = split_text_and_image_prompts(content_text)
+        filtered_lines = [
+            line for line in cleaned_text.splitlines()
+            if line.strip() and line.strip() != slide_data['title']
+        ]
+        text_content = "\n".join(filtered_lines)
+
+        # Use placeholder for content and clear existing content
+        content_shape = slide.shapes.placeholders[1]  # type: ignore
+        content_shape.text_frame.clear()  # type: ignore
+        content_shape.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # type: ignore
         if text_content.strip():
-            # Use placeholder for content and clear existing content
-            content_shape = slide.shapes.placeholders[1]  # type: ignore
-            content_shape.text_frame.clear()  # type: ignore
-            content_shape.text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE  # type: ignore
             add_formatted_text_to_shape(content_shape, text_content)
+
+        if image_prompts:
+            prompt, caption = image_prompts[0]
+            resolved_prompt = prompt or slide_data['title']
+            image_path = ensure_image_for_prompt(resolved_prompt, api_key, image_cache)
+            if image_path:
+                add_image_to_slide(slide, prs, content_shape, image_path, caption or resolved_prompt)
+            else:
+                add_image_placeholder_to_slide(content_shape, caption or resolved_prompt)
+
         # Add speaker notes if present
         if notes_lines:
             notes_slide = slide.notes_slide  # type: ignore
@@ -994,29 +1334,45 @@ def create_presentation_from_content(presentation_content, topic, api_key):
     prs.save(file_path)
     return file_path
 
-def create_document_from_content(presentation_content, topic):
+def create_document_from_content(presentation_content, topic, api_key, image_cache: dict[str, str] | None = None):
     """Creates a Word document from a list of slide content."""
     doc = Document()
     doc.add_heading(f"Report on: {topic}", level=0)
+
+    image_cache = image_cache or {}
+
     for slide_data in presentation_content:
         doc.add_heading(slide_data['title'], level=1)
-        # Use the new formatter for the document content
-        add_formatted_text_to_document(doc, slide_data['content'])
-        doc.add_paragraph() # Add some space
+        content_lines, _ = split_content_and_notes(slide_data['content'], slide_data['title'])
+        content_text = "\n".join(content_lines)
+        cleaned_text, image_prompts = split_text_and_image_prompts(content_text)
+
+        if cleaned_text.strip():
+            add_formatted_text_to_document(doc, cleaned_text)
+
+        for prompt, caption in image_prompts:
+            resolved_prompt = prompt or slide_data['title']
+            image_path = ensure_image_for_prompt(resolved_prompt, api_key, image_cache)
+            if image_path:
+                add_image_to_document(doc, image_path, caption or resolved_prompt)
+            else:
+                add_image_placeholder_to_document(doc, caption or resolved_prompt)
+
+        doc.add_paragraph()  # Add some space between sections
 
     safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '_')).rstrip()
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"Document_{safe_topic}_{timestamp}.docx"
-    
+
     os.makedirs(GENERATED_FILES_DIR, exist_ok=True)
     file_path = os.path.join(GENERATED_FILES_DIR, filename)
     doc.save(file_path)
     return file_path
 
-def create_study_guide_from_content(study_guide_content, topic, style, extreme_mode=False):
+def create_study_guide_from_content(study_guide_content, topic, style, extreme_mode=False, api_key: str | None = None, image_cache: dict[str, str] | None = None):
     """Creates a Word document study guide from a list of section content."""
     doc = Document()
-    
+
     # Add title and metadata
     title = doc.add_heading(f"Study Guide: {topic}", level=0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1040,10 +1396,23 @@ def create_study_guide_from_content(study_guide_content, topic, style, extreme_m
     
     doc.add_page_break()
     
+    image_cache = image_cache or {}
+
     # Add content sections
     for section_data in study_guide_content:
         doc.add_heading(section_data['title'], level=1)
-        add_formatted_text_to_document(doc, section_data['content'])
+        cleaned_text, image_prompts = split_text_and_image_prompts(section_data['content'])
+        if cleaned_text.strip():
+            add_formatted_text_to_document(doc, cleaned_text)
+
+        for prompt, caption in image_prompts:
+            resolved_prompt = prompt or section_data['title']
+            image_path = ensure_image_for_prompt(resolved_prompt, api_key or "", image_cache)
+            if image_path:
+                add_image_to_document(doc, image_path, caption or resolved_prompt)
+            else:
+                add_image_placeholder_to_document(doc, caption or resolved_prompt)
+
         doc.add_paragraph()  # Add spacing between sections
 
     # Save the document
@@ -1260,12 +1629,24 @@ def render_presentation_mode(dbms):
         st.subheader("Export Presentation")
         topic = st.session_state.presentation_topic
         col1, col2 = st.columns(2)
+        api_key = os.getenv("DASHSCOPE_API_KEY", "")
+        shared_image_cache: dict[str, str] = {}
         with col1:
-            ppt_path = create_presentation_from_content(st.session_state.presentation_content, topic, os.getenv("DASHSCOPE_API_KEY", ""))
+            ppt_path = create_presentation_from_content(
+                st.session_state.presentation_content,
+                topic,
+                api_key,
+                shared_image_cache,
+            )
             with open(ppt_path, "rb") as f:
                 st.download_button("⬇️ Download PowerPoint", f, file_name=os.path.basename(ppt_path), mime="application/vnd.openxmlformats-officedocument.presentationml.presentation")
         with col2:
-            doc_path = create_document_from_content(st.session_state.presentation_content, topic)
+            doc_path = create_document_from_content(
+                st.session_state.presentation_content,
+                topic,
+                api_key,
+                shared_image_cache,
+            )
             with open(doc_path, "rb") as f:
                 st.download_button("⬇️ Download Word Document", f, file_name=os.path.basename(doc_path), mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
@@ -1575,18 +1956,22 @@ def render_study_guide_mode(dbms):
         with col1:
             st.markdown("### 📄 Word Document")
             st.write("Complete study guide with formatting and table of contents")
-            
+
             try:
+                api_key = os.getenv("DASHSCOPE_API_KEY", "")
+                image_cache: dict[str, str] = {}
                 doc_path = create_study_guide_from_content(
-                    st.session_state.study_guide_content, 
-                    topic, 
+                    st.session_state.study_guide_content,
+                    topic,
                     style,
-                    st.session_state.get('study_guide_extreme_mode', False)
+                    st.session_state.get('study_guide_extreme_mode', False),
+                    api_key,
+                    image_cache,
                 )
                 with open(doc_path, "rb") as f:
                     st.download_button(
-                        "⬇️ Download Study Guide (.docx)", 
-                        f, 
+                        "⬇️ Download Study Guide (.docx)",
+                        f,
                         file_name=os.path.basename(doc_path), 
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
