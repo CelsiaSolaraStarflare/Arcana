@@ -1,5 +1,9 @@
-import streamlit as st
+import base64
+import mimetypes
+from io import BytesIO
+
 import openai
+import streamlit as st
 from arcana.utils.response import openai_api_call
 
 # Ensure NLTK data is available before importing NLTK functions
@@ -79,6 +83,95 @@ def _clean_html_snippet(snippet: str) -> str:
     # Remove simple HTML tags that occasionally show up in RSS descriptions
     text = re.sub(r"<[^>]+>", "", text)
     return text.strip()
+
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
+
+
+def _encode_image_to_data_url(
+    file_name: str,
+    raw_bytes: bytes,
+    mime_type: Optional[str] = None,
+) -> str:
+    """Return a base64 data URL for the provided image bytes."""
+
+    inferred_mime = mime_type or mimetypes.guess_type(file_name)[0] or "image/png"
+    b64_data = base64.b64encode(raw_bytes).decode("utf-8")
+    return f"data:{inferred_mime};base64,{b64_data}"
+
+
+def _data_url_to_bytes(data_url: str) -> Optional[bytes]:
+    """Decode a base64 data URL into raw bytes."""
+
+    if not data_url.startswith("data:"):
+        return None
+
+    try:
+        _, encoded = data_url.split(",", 1)
+        return base64.b64decode(encoded)
+    except Exception:
+        return None
+
+
+def _render_message_content(content) -> None:
+    """Render chat message content that may include text and images."""
+
+    if isinstance(content, str):
+        st.markdown(content)
+        return
+
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict):
+                part_type = part.get("type")
+                if part_type == "text":
+                    st.markdown(part.get("text", ""))
+                elif part_type in {"image_url", "input_image"}:
+                    image_info = part.get("image_url", {})
+                    if isinstance(image_info, dict):
+                        image_url = image_info.get("url", "")
+                        caption = image_info.get("caption") or image_info.get("description")
+                        if image_url:
+                            if image_url.startswith("data:"):
+                                image_bytes = _data_url_to_bytes(image_url)
+                                if image_bytes is not None:
+                                    st.image(BytesIO(image_bytes), caption=caption, use_column_width=True)
+                                else:
+                                    st.image(image_url, caption=caption, use_column_width=True)
+                            else:
+                                st.image(image_url, caption=caption, use_column_width=True)
+                else:
+                    st.markdown(str(part))
+            else:
+                st.markdown(str(part))
+        return
+
+    st.markdown(str(content))
+
+
+def _message_content_to_plain_text(content) -> str:
+    """Extract textual content from a chat message for metadata tasks."""
+
+    if content is None:
+        return ""
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        fragments: List[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                part_type = part.get("type")
+                if part_type == "text":
+                    fragments.append(part.get("text", ""))
+                elif part_type in {"image_url", "input_image"}:
+                    fragments.append("[image]")
+            else:
+                fragments.append(str(part))
+        return " ".join(fragment for fragment in fragments if fragment).strip()
+
+    return str(content)
 
 
 _NEWS_SENSITIVE_KEYWORDS = {
@@ -585,7 +678,11 @@ def get_available_chat_histories():
 def generate_chat_tagline(messages):
     """Generate a short tagline from the conversation."""
     try:
-        content = " ".join(msg["content"] for msg in messages if msg["role"] == "user")
+        content = " ".join(
+            _message_content_to_plain_text(msg.get("content"))
+            for msg in messages
+            if msg.get("role") == "user"
+        )
         if not content:
             return ""
         lang = detect_language(content)
@@ -598,11 +695,15 @@ def auto_generate_chat_title(messages):
     """Generate a meaningful title for the chat based on the conversation content."""
     try:
         # Extract user messages for title generation
-        user_messages = [msg['content'] for msg in messages if msg['role'] == 'user']
-        
+        user_messages = [
+            _message_content_to_plain_text(msg.get('content'))
+            for msg in messages
+            if msg.get('role') == 'user'
+        ]
+
         if not user_messages:
             return f"chat_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+
         # Use first few user messages to generate title
         conversation_sample = " ".join(user_messages[:3])  # First 3 user messages
         
@@ -737,7 +838,10 @@ def extract_content_from_file(uploaded_file):
 
 def chatbot_page():
     st.title("Chat With Arcana")
-    
+
+    st.session_state.setdefault("pending_vision_inputs", [])
+    st.session_state.setdefault("vision_last_image_data", None)
+
     # Add custom CSS for ChatGPT-like styling
     st.markdown("""
     <style>
@@ -900,8 +1004,8 @@ def chatbot_page():
         
         uploaded_file = st.file_uploader(
             "Choose a file to analyze",
-            type=['txt', 'pdf', 'docx', 'pptx', 'csv', 'xlsx', 'xls'],
-            help="Supported formats: PDF, Word, PowerPoint, Text, Excel, CSV"
+            type=['txt', 'pdf', 'docx', 'pptx', 'csv', 'xlsx', 'xls', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'],
+            help="Supported formats: PDF, Word, PowerPoint, Text, Excel, CSV, common image types"
         )
         
         # Show current file context if one is loaded
@@ -922,32 +1026,66 @@ def chatbot_page():
             if len(meaningful_messages) >= 2:
                 st.caption(f"💬 {len(meaningful_messages)} messages • Auto-saves when starting new chat")
         if uploaded_file is not None:
-            # Check if this file has been processed already to avoid reprocessing on every rerun
-            if st.session_state.get('processed_file_name') != uploaded_file.name:
+            file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+            if file_extension in IMAGE_EXTENSIONS:
+                image_bytes = uploaded_file.getvalue()
+                data_url = _encode_image_to_data_url(
+                    uploaded_file.name,
+                    image_bytes,
+                    getattr(uploaded_file, "type", None),
+                )
+                pending_images = st.session_state.setdefault("pending_vision_inputs", [])
+                last_data_url = st.session_state.get("vision_last_image_data")
+                if not any(img.get("data_url") == data_url for img in pending_images):
+                    pending_images.append({
+                        "name": uploaded_file.name,
+                        "data_url": data_url,
+                    })
+                    st.session_state["vision_last_image_data"] = data_url
+                    uploads_dir = os.path.join(CACHE_DIR, "Uploads")
+                    os.makedirs(uploads_dir, exist_ok=True)
+                    try:
+                        file_path = os.path.join(uploads_dir, uploaded_file.name)
+                        with open(file_path, "wb") as f:
+                            f.write(image_bytes)
+                        st.info(f"💾 Saved to {uploads_dir}: {uploaded_file.name}")
+                    except Exception as e:
+                        st.warning(f"Could not save image to {uploads_dir}: {e}")
+                    if last_data_url == data_url:
+                        st.info(
+                            "🖼️ Image re-queued for follow-up questions. It will accompany your next message."
+                        )
+                    else:
+                        st.success(
+                            "🖼️ Image queued for analysis. Ask a question and it will be included in the next reply."
+                        )
+                else:
+                    st.info("🖼️ This image is already queued for the next response.")
+            elif st.session_state.get('processed_file_name') != uploaded_file.name:
                 with st.spinner(f"🔍 Processing {uploaded_file.name}..."):
                     file_content = extract_content_from_file(uploaded_file)
                     if file_content:
                         # Save the uploaded file to CACHE_DIR/Uploads directory
                         uploads_dir = os.path.join(CACHE_DIR, "Uploads")
                         os.makedirs(uploads_dir, exist_ok=True)
-                        
+
                         try:
                             # Save the original file
                             file_path = os.path.join(uploads_dir, uploaded_file.name)
                             with open(file_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
-                            
+
                             # Also save extracted content as txt for easy reference
                             txt_filename = os.path.splitext(uploaded_file.name)[0] + "_extracted.txt"
                             txt_path = os.path.join(uploads_dir, txt_filename)
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(file_content)
-                            
+
                             st.info(f"💾 Saved to {uploads_dir}: {uploaded_file.name} + extracted text")
                         except Exception as e:
                             st.warning(f"Could not save file to {uploads_dir}: {e}")
                             # Continue with processing even if file saving fails
-                        
+
                         # Index the new file content into the database
                         with st.spinner(f"📚 Indexing content..."):
                             lines = file_content.split('\n')
@@ -982,9 +1120,22 @@ def chatbot_page():
 
     # Display existing conversation (excluding system messages)
     for message in st.session_state.messages:
-        if message["role"] != "system":
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+        role = message.get("role")
+        if role != "system":
+            with st.chat_message(role):
+                _render_message_content(message.get("content"))
+
+    pending_images = st.session_state.get("pending_vision_inputs", [])
+    if pending_images:
+        with st.expander("🖼️ Images queued for next message", expanded=False):
+            for idx, image in enumerate(pending_images, start=1):
+                caption = image.get("name") or f"Image {idx}"
+                data_url = image.get("data_url", "")
+                image_bytes = _data_url_to_bytes(data_url)
+                if image_bytes is not None:
+                    st.image(BytesIO(image_bytes), caption=caption, use_column_width=True)
+                elif data_url:
+                    st.image(data_url, caption=caption, use_column_width=True)
 
     # User input area
     user_input = st.chat_input("Ask me anything about your documents...")
@@ -1059,10 +1210,32 @@ def chatbot_page():
 
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
-        st.session_state.messages.append({"role": "user", "content": user_input})
+        pending_images_to_send = list(st.session_state.get("pending_vision_inputs", []))
+        if pending_images_to_send:
+            user_content: List[dict] = []
+            for image in pending_images_to_send:
+                data_url = image.get("data_url")
+                if not data_url:
+                    continue
+                user_content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_url,
+                            "detail": "auto",
+                        },
+                    }
+                )
+            user_content.append({"type": "text", "text": user_input})
+            user_message = {"role": "user", "content": user_content}
+        else:
+            user_message = {"role": "user", "content": user_input}
+
+        st.session_state.messages.append(user_message)
         with st.chat_message("user"):
-            st.markdown(user_input)
-        
+            _render_message_content(user_message["content"])
+        st.session_state["pending_vision_inputs"] = []
+
         # If a file has NOT been processed, search the database for context.
         # If a file HAS been processed, its context is already in the messages, so we skip this.
         results: List[dict] = []
@@ -1455,3 +1628,5 @@ def init_messages():
         {"role": "assistant", "content": "Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about your indexed files!"},
         {"role": "system", "content": BASE_SYSTEM_PROMPT},
     ]
+    st.session_state.pending_vision_inputs = []
+    st.session_state.vision_last_image_data = None

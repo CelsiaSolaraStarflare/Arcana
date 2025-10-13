@@ -1,5 +1,6 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, Iterator, List, Optional
+from typing import Any, Callable, Iterable, Iterator, List, Optional
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
@@ -69,6 +70,33 @@ class ResponseStream:
         return bool(self.reasoning)
 
 
+def _extract_message_content(message: ChatCompletionMessageParam) -> Any:
+    """Return the ``content`` payload from a chat message param."""
+
+    if isinstance(message, Mapping):
+        return message.get("content")
+
+    # Fallback for objects that expose ``content`` as an attribute.
+    return getattr(message, "content", None)
+
+
+def _message_contains_image(message: ChatCompletionMessageParam) -> bool:
+    """Determine whether the given message contains an image payload."""
+
+    content = _extract_message_content(message)
+
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, Mapping):
+                part_type = part.get("type")
+                if part_type in {"image_url", "input_image"}:
+                    return True
+                if "image_url" in part and isinstance(part["image_url"], Mapping):
+                    return True
+
+    return False
+
+
 def openai_api_call(
     messages: Iterable[ChatCompletionMessageParam],
     mode: str = "Normal",
@@ -96,12 +124,15 @@ def openai_api_call(
         "Discrete": "qwen-plus-2025-04-28",
     }
 
-    model = model_map.get(normalized_mode, "qwen-turbo")
     messages_list = list(messages)
+    contains_image = any(_message_contains_image(msg) for msg in messages_list)
 
-    extra_body = {}
-    if normalized_mode in {"Reasoning", "Discrete"}:
+    model = "qwen3-vl-plus" if contains_image else model_map.get(normalized_mode, "qwen-turbo")
+
+    extra_body: dict[str, Any] = {}
+    if normalized_mode == "Reasoning" or contains_image:
         extra_body["enable_thinking"] = True
+        extra_body["thinking_budget"] = 81920
 
     def factory() -> Iterator:
         return client.chat.completions.create(
