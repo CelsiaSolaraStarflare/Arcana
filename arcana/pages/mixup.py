@@ -5,6 +5,10 @@ import os
 import datetime
 import re
 import io
+import json
+import csv
+from dataclasses import dataclass
+from typing import Iterable, Sequence
 import requests
 
 # Ensure NLTK data is available before importing NLTK functions
@@ -22,6 +26,375 @@ from pptx.enum.text import MSO_AUTO_SIZE
 from docx import Document
 from docx.shared import Pt as DocxPt, RGBColor as DocxRGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH  # type: ignore
+
+# --- Flashcard Utilities ---
+
+
+@dataclass
+class Flashcard:
+    """Simple container for generated flashcards."""
+
+    question: str
+    answer: str
+    hint: str | None = None
+    tags: tuple[str, ...] = ()
+
+    def as_row(self) -> list[str]:
+        """Return a row representation suitable for CSV export."""
+
+        tag_string = ", ".join(self.tags)
+        return [self.question, self.answer, self.hint or "", tag_string]
+
+
+@dataclass
+class FlashcardGenerationSettings:
+    """Configuration collected from the UI before calling the model."""
+
+    topic: str
+    num_cards: int
+    difficulty: str
+    focus: str
+    tone: str
+    include_hints: bool
+    additional_context: str
+    custom_instructions: str
+    use_documents: bool = False
+
+
+def default_flashcard_settings() -> FlashcardGenerationSettings:
+    """Return baseline flashcard settings used to populate the UI."""
+
+    return FlashcardGenerationSettings(
+        topic="",
+        num_cards=10,
+        difficulty="Intermediate",
+        focus="Key Concepts",
+        tone="Concise",
+        include_hints=True,
+        additional_context="",
+        custom_instructions="",
+        use_documents=False,
+    )
+
+
+FLASHCARD_DIFFICULTY_GUIDANCE = {
+    "Beginner": "Keep questions straightforward and define key vocabulary so someone new to the topic can follow along.",
+    "Intermediate": "Assume the learner has some familiarity—mix definition, application, and comparison style questions.",
+    "Advanced": "Push toward deeper analysis, real-world applications, and synthesis across related ideas.",
+}
+
+
+FLASHCARD_FOCUS_GUIDANCE = {
+    "Key Concepts": "Highlight the most important concepts and why they matter.",
+    "Definitions": "Prioritise crisp term-definition pairs with memorable explanations.",
+    "Process & Steps": "Break multi-step processes into sequential cues that can be practiced individually.",
+    "Problem Solving": "Use scenario-based prompts that require reasoning through an answer.",
+}
+
+
+FLASHCARD_TONE_GUIDANCE = {
+    "Concise": "Use short, high-impact wording so cards are quick to scan.",
+    "Detailed": "Allow a couple of sentences for both question framing and answer depth.",
+    "Story-driven": "Include brief real-world hooks or anecdotes to anchor memory.",
+}
+
+
+def init_flashcard_state(force_reset: bool = False) -> None:
+    """Initialise or reset Streamlit session keys used by the flashcard UI."""
+
+    defaults = {
+        "flashcard_results": [],
+        "flashcard_error": "",
+        "flashcard_topic": "",
+        "flashcard_settings": default_flashcard_settings(),
+        "flashcard_raw_response": "",
+    }
+
+    if force_reset:
+        for key in defaults:
+            if key in st.session_state:
+                del st.session_state[key]
+
+    for key, value in defaults.items():
+        st.session_state.setdefault(key, value)
+
+
+def build_flashcard_prompt(settings: FlashcardGenerationSettings, context: str) -> str:
+    """Compose the prompt sent to the language model for flashcard generation."""
+
+    guidance_lines = [
+        f"Create exactly {settings.num_cards} study flashcards about '{settings.topic}'.",
+        FLASHCARD_DIFFICULTY_GUIDANCE[settings.difficulty],
+        FLASHCARD_FOCUS_GUIDANCE[settings.focus],
+        FLASHCARD_TONE_GUIDANCE[settings.tone],
+    ]
+
+    if settings.include_hints:
+        guidance_lines.append("Provide a short optional hint that helps recall without revealing the full answer.")
+
+    if settings.custom_instructions.strip():
+        guidance_lines.append(settings.custom_instructions.strip())
+
+    if context.strip():
+        guidance_lines.append("Base the cards strictly on the following context while keeping them self-contained:")
+        guidance_lines.append(context.strip())
+
+    guidance_lines.append(
+        "Respond in JSON with the schema {\"flashcards\": [{\"question\": str, \"answer\": str, \"hint\"?: str, \"tags\"?: [str]}]}.",
+    )
+    guidance_lines.append("Each flashcard must have non-empty question and answer fields.")
+
+    return "\n\n".join(guidance_lines)
+
+
+def generate_flashcards(
+    settings: FlashcardGenerationSettings,
+    dbms: FiberDBMS | None = None,
+) -> tuple[list[Flashcard], str]:
+    """Call the language model and return structured flashcards plus raw output."""
+
+    context_parts: list[str] = []
+    if settings.additional_context.strip():
+        context_parts.append(settings.additional_context.strip())
+
+    if settings.use_documents and dbms is not None and not dbms.is_empty():
+        document_context = get_context_for_topic(dbms, settings.topic)
+        if document_context:
+            context_parts.append(document_context)
+
+    prompt = build_flashcard_prompt(settings, "\n\n".join(context_parts))
+
+    messages: list[ChatCompletionMessageParam] = [
+        {
+            "role": "system",
+            "content": (
+                "You are an educational assistant who creates retrieval-practice flashcards. "
+                "Return only valid JSON with well-structured question and answer pairs."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
+
+    response_stream = openai_api_call(messages, "Idx")
+    raw_response = "".join(response_stream)
+    flashcards = parse_flashcard_response(raw_response)
+
+    if not flashcards:
+        raise ValueError("Could not parse any flashcards from the model response. Please try again or adjust the prompt.")
+
+    if len(flashcards) != settings.num_cards:
+        st.warning(
+            "The generated deck did not include the requested number of cards. You can regenerate for a fuller set."
+        )
+
+    return flashcards, raw_response
+
+
+def _strip_code_fence(response_text: str) -> str:
+    """Remove Markdown code fences from a response so it can be parsed as JSON."""
+
+    cleaned = response_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+    if cleaned.endswith("```"):
+        cleaned = cleaned.rsplit("\n", 1)[0]
+    return cleaned.strip()
+
+
+def parse_flashcard_response(response_text: str) -> list[Flashcard]:
+    """Parse the model response into structured flashcards."""
+
+    cleaned = _strip_code_fence(response_text)
+    candidates: Sequence[dict[str, object]] | None = None
+
+    try:
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict) and "flashcards" in parsed:
+            maybe_cards = parsed.get("flashcards")
+            if isinstance(maybe_cards, list):
+                candidates = maybe_cards  # type: ignore[assignment]
+        elif isinstance(parsed, list):
+            candidates = parsed  # type: ignore[assignment]
+    except json.JSONDecodeError:
+        candidates = None
+
+    if candidates is None:
+        return parse_legacy_flashcard_format(response_text)
+
+    flashcards: list[Flashcard] = []
+    for entry in candidates:
+        if not isinstance(entry, dict):
+            continue
+
+        question = str(entry.get("question", "")).strip()
+        answer = str(entry.get("answer", "")).strip()
+        hint = entry.get("hint")
+        tags_field = entry.get("tags", ())
+
+        if not question or not answer:
+            continue
+
+        parsed_hint = str(hint).strip() if isinstance(hint, str) else None
+        if isinstance(tags_field, str):
+            tags: Iterable[str] = [segment.strip() for segment in tags_field.split(",") if segment.strip()]
+        elif isinstance(tags_field, Sequence):
+            tags = [str(tag).strip() for tag in tags_field if str(tag).strip()]
+        else:
+            tags = []
+
+        flashcards.append(Flashcard(question=question, answer=answer, hint=parsed_hint, tags=tuple(tags)))
+
+    if flashcards:
+        return flashcards
+
+    return parse_legacy_flashcard_format(response_text)
+
+
+def parse_legacy_flashcard_format(response_text: str) -> list[Flashcard]:
+    """Fallback parser for older plain-text Q/A flashcard responses."""
+
+    lines = [line.strip() for line in response_text.splitlines() if line.strip()]
+    flashcards: list[Flashcard] = []
+    current_question = ""
+    current_answer_parts: list[str] = []
+
+    for line in lines:
+        if re.match(r"^q\s*:", line, re.IGNORECASE):
+            if current_question and current_answer_parts:
+                flashcards.append(
+                    Flashcard(question=current_question, answer=" ".join(current_answer_parts).strip())
+                )
+            current_question = re.sub(r"^q\s*:\s*", "", line, flags=re.IGNORECASE).strip()
+            current_answer_parts = []
+        elif re.match(r"^a\s*:", line, re.IGNORECASE):
+            current_answer_parts.append(re.sub(r"^a\s*:\s*", "", line, flags=re.IGNORECASE).strip())
+        else:
+            if current_answer_parts:
+                current_answer_parts.append(line)
+
+    if current_question and current_answer_parts:
+        flashcards.append(Flashcard(question=current_question, answer=" ".join(current_answer_parts).strip()))
+
+    return flashcards
+
+
+def format_flashcards_for_download(
+    topic: str,
+    settings: FlashcardGenerationSettings,
+    flashcards: Sequence[Flashcard],
+) -> str:
+    """Create a human-readable export for generated flashcards."""
+
+    timestamp = datetime.datetime.now().strftime("%B %d, %Y")
+    header = [
+        f"FLASHCARD DECK: {topic.upper()}",
+        f"Generated: {timestamp}",
+        f"Difficulty: {settings.difficulty}",
+        f"Focus: {settings.focus}",
+        f"Tone: {settings.tone}",
+    ]
+
+    if settings.include_hints:
+        header.append("Includes optional hints for spaced recall.")
+
+    export_lines = ["\n".join(header), "=" * 60, ""]
+
+    for idx, card in enumerate(flashcards, start=1):
+        export_lines.append(f"CARD {idx}")
+        export_lines.append(f"Q: {card.question}")
+        export_lines.append(f"A: {card.answer}")
+        if card.hint:
+            export_lines.append(f"Hint: {card.hint}")
+        if card.tags:
+            export_lines.append(f"Tags: {', '.join(card.tags)}")
+        export_lines.append("")
+
+    return "\n".join(export_lines)
+
+
+def flashcards_to_csv(flashcards: Sequence[Flashcard]) -> bytes:
+    """Return the flashcards as CSV bytes for download."""
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Question", "Answer", "Hint", "Tags"])
+    for card in flashcards:
+        writer.writerow(card.as_row())
+    return buffer.getvalue().encode("utf-8")
+
+
+def render_flashcard_results(
+    topic: str,
+    settings: FlashcardGenerationSettings,
+    flashcards: Sequence[Flashcard],
+) -> None:
+    """Render generated flashcards and export controls."""
+
+    st.success(f"Generated {len(flashcards)} flashcards for '{topic}'.")
+    st.caption(
+        "Review each card below, then download the deck as text or CSV to import into apps like Anki or Quizlet."
+    )
+
+    if len(flashcards) > 1:
+        tabs = st.tabs([f"Card {idx}" for idx in range(1, len(flashcards) + 1)])
+        for idx, (tab, card) in enumerate(zip(tabs, flashcards), start=1):
+            with tab:
+                render_single_flashcard(card, idx)
+    else:
+        render_single_flashcard(flashcards[0], 1)
+
+    table_rows = [
+        {
+            "Question": card.question,
+            "Answer": card.answer,
+            "Hint": card.hint or "",
+            "Tags": ", ".join(card.tags),
+        }
+        for card in flashcards
+    ]
+
+    with st.expander("📋 View as table", expanded=False):
+        st.dataframe(table_rows, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.subheader("📥 Export Flashcards")
+
+    text_payload = format_flashcards_for_download(topic, settings, flashcards)
+    csv_payload = flashcards_to_csv(flashcards)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "⬇️ Download as Text (.txt)",
+            text_payload.encode("utf-8"),
+            file_name=f"Flashcards_{topic.replace(' ', '_')}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+    with col2:
+        st.download_button(
+            "⬇️ Download as CSV (.csv)",
+            csv_payload,
+            file_name=f"Flashcards_{topic.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+
+def render_single_flashcard(card: Flashcard, index: int) -> None:
+    """Display an individual flashcard with expandable sections."""
+
+    st.markdown(f"### 🃏 Flashcard {index}")
+    with st.expander("❓ Question", expanded=True):
+        st.write(card.question)
+    with st.expander("✅ Answer", expanded=False):
+        st.write(card.answer)
+    if card.hint:
+        with st.expander("💡 Hint", expanded=False):
+            st.write(card.hint)
+    if card.tags:
+        st.caption(f"Tags: {', '.join(card.tags)}")
+
 
 # --- Markdown Parser for Word Documents ---
 
@@ -1262,111 +1635,145 @@ def render_study_guide_mode(dbms):
                 st.session_state.mixup_mode_selector = "Presentation"  # Switch the radio button
                 st.rerun()
 
-def render_flashcard_mode():
+def render_flashcard_mode(dbms: FiberDBMS | None = None) -> None:
+    """Interactive UI for building flashcard decks."""
+
     st.header("📇 Q&A Flashcard Generator")
-    st.info("⚠️ **Note:** This is a simplified implementation. Full flashcard functionality coming soon!")
-    
-    # Simple flashcard generator
-    st.subheader("Quick Flashcard Generator")
-    
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        topic = st.text_input("Enter a topic for flashcard generation:", 
-                            placeholder="e.g., Biology Terms, History Dates, Math Formulas")
-    
-    with col2:
-        num_cards = st.selectbox("Number of flashcards:", [5, 10, 15, 20], index=1)
-    
-    if st.button("Generate Flashcards") and topic:
-        with st.spinner(f"Generating {num_cards} flashcards for {topic}..."):
-            # Simple prompt for flashcard generation
-            prompt = (f"Create {num_cards} educational flashcards about {topic}. "
-                     f"Format each flashcard as 'Q: [question]' followed by 'A: [answer]' on the next line. "
-                     f"Make questions clear and concise, and answers accurate and helpful for studying.")
-            
-            messages: list[ChatCompletionMessageParam] = [
-                {"role": "system", "content": "You are an educational AI that creates study flashcards."},
-                {"role": "user", "content": prompt}
-            ]
-            
-            flashcard_content = "".join(openai_api_call(messages, "Idx"))
-            
-            # Parse and display flashcards
-            lines = flashcard_content.split('\n')
-            current_question = ""
-            current_answer = ""
-            flashcards = []
-            
-            for line in lines:
-                line = line.strip()
-                if line.startswith('Q:'):
-                    if current_question and current_answer:
-                        flashcards.append({'question': current_question, 'answer': current_answer})
-                    current_question = line[2:].strip()
-                    current_answer = ""
-                elif line.startswith('A:'):
-                    current_answer = line[2:].strip()
-                elif current_answer and line:  # Continue answer on next lines
-                    current_answer += " " + line
-            
-            # Add the last flashcard
-            if current_question and current_answer:
-                flashcards.append({'question': current_question, 'answer': current_answer})
-            
-            # Display flashcards
-            if flashcards:
-                st.success(f"Generated {len(flashcards)} flashcards!")
-                
-                # Create tabs for each flashcard
-                if len(flashcards) > 1:
-                    flashcard_tabs = st.tabs([f"Card {i+1}" for i in range(len(flashcards))])
-                    
-                    for i, (tab, card) in enumerate(zip(flashcard_tabs, flashcards)):
-                        with tab:
-                            st.markdown(f"### 🃏 Flashcard {i+1}")
-                            
-                            # Create expandable sections for question and answer
-                            with st.expander("❓ Question", expanded=True):
-                                st.write(card['question'])
-                            
-                            with st.expander("✅ Answer", expanded=False):
-                                st.write(card['answer'])
+    init_flashcard_state()
+
+    saved_settings = st.session_state.flashcard_settings
+    if not isinstance(saved_settings, FlashcardGenerationSettings):
+        saved_settings = default_flashcard_settings()
+
+    default_topic = st.session_state.flashcard_topic or saved_settings.topic
+    difficulty_options = list(FLASHCARD_DIFFICULTY_GUIDANCE.keys())
+    focus_options = list(FLASHCARD_FOCUS_GUIDANCE.keys())
+    tone_options = list(FLASHCARD_TONE_GUIDANCE.keys())
+
+    with st.form("flashcard_generation_form", clear_on_submit=False):
+        st.subheader("Deck Settings")
+
+        topic = st.text_input(
+            "Topic",
+            value=default_topic,
+            placeholder="e.g., Biology Terms, History Dates, Math Formulas",
+        )
+
+        num_cards = st.slider(
+            "Number of flashcards",
+            min_value=4,
+            max_value=30,
+            value=max(4, min(30, saved_settings.num_cards)),
+            step=1,
+        )
+
+        col1, col2 = st.columns(2)
+        difficulty = col1.selectbox(
+            "Learning level",
+            difficulty_options,
+            index=difficulty_options.index(saved_settings.difficulty)
+            if saved_settings.difficulty in difficulty_options
+            else 1,
+        )
+        tone = col2.selectbox(
+            "Tone",
+            tone_options,
+            index=tone_options.index(saved_settings.tone)
+            if saved_settings.tone in tone_options
+            else 0,
+        )
+
+        focus = st.selectbox(
+            "Focus",
+            focus_options,
+            index=focus_options.index(saved_settings.focus)
+            if saved_settings.focus in focus_options
+            else 0,
+        )
+
+        include_hints = st.checkbox(
+            "Include short memory hints",
+            value=bool(saved_settings.include_hints),
+        )
+
+        additional_context = st.text_area(
+            "Optional study notes or context",
+            value=saved_settings.additional_context,
+            help="Paste any notes, textbook excerpts, or key points you want woven into the flashcards.",
+        )
+
+        custom_instructions = st.text_area(
+            "Custom instructions (optional)",
+            value=saved_settings.custom_instructions,
+            placeholder="e.g., Group cards by subtopic, emphasise common misconceptions, include mnemonics.",
+        )
+
+        use_documents = False
+        if dbms is not None and not dbms.is_empty():
+            use_documents = st.checkbox(
+                "Enrich with relevant snippets from my uploaded files",
+                value=bool(saved_settings.use_documents),
+                help="When enabled, Arcana searches your indexed documents for context to ground each flashcard.",
+            )
+
+        submitted = st.form_submit_button("Generate Flashcards", use_container_width=True)
+
+    if submitted:
+        if not topic.strip():
+            st.session_state.flashcard_error = "Please enter a topic before generating flashcards."
+        else:
+            new_settings = FlashcardGenerationSettings(
+                topic=topic.strip(),
+                num_cards=num_cards,
+                difficulty=difficulty,
+                focus=focus,
+                tone=tone,
+                include_hints=include_hints,
+                additional_context=additional_context.strip(),
+                custom_instructions=custom_instructions.strip(),
+                use_documents=use_documents,
+            )
+
+            st.session_state.flashcard_topic = topic.strip()
+            st.session_state.flashcard_settings = new_settings
+
+            with st.spinner(f"Generating {num_cards} flashcards for {topic.strip()}..."):
+                try:
+                    flashcards, raw_response = generate_flashcards(new_settings, dbms)
+                except Exception as exc:  # pragma: no cover - UI feedback path
+                    st.session_state.flashcard_error = str(exc)
+                    st.session_state.flashcard_results = []
+                    st.session_state.flashcard_raw_response = ""
                 else:
-                    # Single flashcard
-                    card = flashcards[0]
-                    st.markdown("### 🃏 Flashcard")
-                    
-                    with st.expander("❓ Question", expanded=True):
-                        st.write(card['question'])
-                    
-                    with st.expander("✅ Answer", expanded=False):
-                        st.write(card['answer'])
-                
-                # Export options
-                st.markdown("---")
-                st.subheader("📥 Export Flashcards")
-                
-                # Create text format for download
-                flashcard_text = f"FLASHCARDS: {topic.upper()}\n"
-                flashcard_text += f"Generated: {datetime.datetime.now().strftime('%B %d, %Y')}\n"
-                flashcard_text += "=" * 50 + "\n\n"
-                
-                for i, card in enumerate(flashcards, 1):
-                    flashcard_text += f"CARD {i}\n"
-                    flashcard_text += f"Q: {card['question']}\n"
-                    flashcard_text += f"A: {card['answer']}\n\n"
-                
-                st.download_button(
-                    "⬇️ Download Flashcards (.txt)",
-                    flashcard_text.encode('utf-8'),
-                    file_name=f"Flashcards_{topic.replace(' ', '_')}.txt",
-                    mime="text/plain"
-                )
-            else:
-                st.error("Could not generate flashcards. Please try again with a different topic.")
-    
-    st.markdown("---")
-    st.info("💡 **Tip:** For more advanced flashcard features, consider using the Study Guide mode and then creating flashcards from the generated content!")
+                    st.session_state.flashcard_error = ""
+                    st.session_state.flashcard_results = flashcards
+                    st.session_state.flashcard_raw_response = raw_response
+
+    if st.session_state.flashcard_error:
+        st.error(st.session_state.flashcard_error)
+
+    flashcards_result = st.session_state.flashcard_results
+    if flashcards_result:
+        render_flashcard_results(
+            st.session_state.flashcard_topic,
+            st.session_state.flashcard_settings,
+            flashcards_result,
+        )
+
+        st.markdown("---")
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            if st.button("🔁 Start a New Deck", use_container_width=True):
+                init_flashcard_state(force_reset=True)
+                st.rerun()
+        with col2:
+            if st.session_state.flashcard_raw_response:
+                with st.expander("View raw model response", expanded=False):
+                    st.code(st.session_state.flashcard_raw_response)
+    else:
+        st.info(
+            "💡 Add an optional note or enable document grounding to tailor cards to your course materials."
+        )
 
 def mixup_page():
     # Initialize language state and render language selector
@@ -1399,7 +1806,7 @@ def mixup_page():
     elif mode == t("study_guide"):
         render_study_guide_mode(dbms)
     elif mode == t("flashcards"):
-        render_flashcard_mode()
+        render_flashcard_mode(dbms)
 
 # --- Translation System for UI ---
 
