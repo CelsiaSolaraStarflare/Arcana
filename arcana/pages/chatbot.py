@@ -976,6 +976,31 @@ def chatbot_page():
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
+    if "agent_manual_selection" not in st.session_state:
+        st.session_state["agent_manual_selection"] = []
+
+    if agent_mode_enabled:
+        agent_for_selection = get_document_agent()
+        available_agent_docs = agent_for_selection.list_available_documents()
+        with st.expander("Agent document selection", expanded=False):
+            st.caption(
+                "Select additional documents for the agent to read before it crafts a reply. "
+                "These files will be summarised alongside search results."
+            )
+            if available_agent_docs:
+                st.multiselect(
+                    "Additional documents for agent summaries",
+                    options=available_agent_docs,
+                    default=st.session_state.get("agent_manual_selection", []),
+                    key="agent_manual_selection",
+                    help=(
+                        "Choose any indexed document. The agent will process the selected files "
+                        "in full and store refreshed summaries for future conversations."
+                    ),
+                )
+            else:
+                st.info("No indexed documents were found in the cache directory yet.")
+
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
         st.session_state.messages.append({"role": "user", "content": user_input})
@@ -1058,16 +1083,74 @@ def chatbot_page():
                     target_files = _unique_preserve_order(
                         result.get("name") for result in results if result.get("name")
                     )
-                    if target_files:
+                    manual_agent_files = [
+                        file_name
+                        for file_name in st.session_state.get("agent_manual_selection", [])
+                        if file_name
+                    ]
+                    candidate_files = _unique_preserve_order(list(target_files) + manual_agent_files)
+
+                    if candidate_files:
+                        agent_progress_container = st.container()
+                        progress_placeholder = agent_progress_container.empty()
+                        progress_bar = agent_progress_container.progress(0.0)
+                        status_rows: List[dict] = []
+                        any_success = False
+                        agent = get_document_agent()
+                        total_candidates = len(candidate_files)
+
                         with st.spinner("🧠 Agent is summarizing documents..."):
-                            agent = get_document_agent()
-                            for file_name in target_files:
+                            for idx, file_name in enumerate(candidate_files, start=1):
+                                progress_placeholder.info(
+                                    f"Agent processing `{file_name}` ({idx}/{total_candidates})"
+                                )
                                 summary_result = agent.summarise_document(file_name, dbms)
                                 if summary_result.summary_text:
                                     agent_summary_results.append(summary_result)
-                                elif summary_result.reason:
-                                    st.warning(f"Agent could not summarise {file_name}: {summary_result.reason}")
-                    elif keywords:
+                                    any_success = True
+                                    status_rows.append(
+                                        {
+                                            "Document": file_name,
+                                            "Result": (
+                                                "Created new summary"
+                                                if summary_result.created
+                                                else "Reused cached summary"
+                                            ),
+                                            "Summary path": summary_result.citation_path or "—",
+                                        }
+                                    )
+                                else:
+                                    reason = summary_result.reason or "Unknown error"
+                                    st.warning(
+                                        f"Agent could not summarise {file_name}: {reason}"
+                                    )
+                                    status_rows.append(
+                                        {
+                                            "Document": file_name,
+                                            "Result": f"Failed: {reason}",
+                                            "Summary path": "—",
+                                        }
+                                    )
+                                progress_bar.progress(idx / total_candidates)
+
+                        progress_bar.progress(1.0)
+                        if any_success:
+                            progress_placeholder.success(
+                                "Agent finished summarising the selected documents."
+                            )
+                        else:
+                            progress_placeholder.warning(
+                                "Agent processed the requested documents but no summaries were generated."
+                            )
+
+                        if status_rows:
+                            status_df = pd.DataFrame(status_rows)
+                            status_df.index = status_df.index + 1
+                            agent_progress_container.dataframe(
+                                status_df,
+                                use_container_width=True,
+                            )
+                    elif keywords or manual_agent_files:
                         st.info("Agent mode enabled, but no documents were retrieved to summarise.")
 
                 if web_supplement_enabled:
@@ -1149,14 +1232,27 @@ def chatbot_page():
         else:
             if agent_mode_enabled and st.session_state.get('processed_file_name'):
                 processed_name = st.session_state['processed_file_name']
+                agent_progress_container = st.container()
+                progress_placeholder = agent_progress_container.empty()
+                progress_bar = agent_progress_container.progress(0.0)
                 with st.spinner("🧠 Agent is summarizing the uploaded file..."):
                     agent = get_document_agent()
+                    progress_placeholder.info(
+                        f"Agent processing `{processed_name}` (1/1)"
+                    )
                     summary_result = agent.summarise_document(processed_name, dbms)
+                progress_bar.progress(1.0)
                 if summary_result.summary_text:
+                    progress_placeholder.success(
+                        "Agent finished summarising the uploaded document."
+                    )
                     agent_summary_results.append(summary_result)
                     if summary_result.created:
                         st.success(f"Agent summary saved for {processed_name}.")
                 elif summary_result.reason:
+                    progress_placeholder.warning(
+                        "Agent processed the uploaded document but could not create a summary."
+                    )
                     st.warning(f"Agent could not summarise {processed_name}: {summary_result.reason}")
 
             if agent_summary_results:

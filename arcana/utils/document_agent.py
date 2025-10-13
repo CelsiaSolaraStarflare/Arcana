@@ -20,6 +20,7 @@ from pptx import Presentation
 from PyPDF2 import PdfReader
 
 from arcana.core.config import CACHE_DIR, INDEX_FILE
+from arcana.utils.document_catalog import DocumentCatalog
 from arcana.utils.fiber import FiberDBMS
 from arcana.utils.indexing import extract_keywords, detect_language
 from arcana.utils.response import openai_api_call
@@ -50,6 +51,15 @@ class DocumentAgent:
         self.cache_dir = Path(cache_dir)
         self.summary_dir = self.cache_dir / summary_subdir
         self.summary_dir.mkdir(parents=True, exist_ok=True)
+        self._catalog = DocumentCatalog(cache_dir=self.cache_dir, exclude_subdirs=(summary_subdir,))
+
+    # ------------------------------------------------------------------
+    # Discovery helpers
+    # ------------------------------------------------------------------
+    def list_available_documents(self) -> List[str]:
+        """Return a sorted list of document names known to the agent."""
+
+        return self._catalog.list_names()
 
     # ------------------------------------------------------------------
     # Public API
@@ -119,6 +129,10 @@ class DocumentAgent:
         if not file_name:
             return None
 
+        record = self._catalog.find(file_name)
+        if record:
+            return record.path
+
         candidate = Path(file_name)
         # Accept absolute paths that already point to a cached file.
         if candidate.is_absolute() and candidate.exists():
@@ -128,12 +142,16 @@ class DocumentAgent:
         # support nested paths stored in the search index.
         relative_candidate = self.cache_dir / candidate
         if relative_candidate.exists():
+            # Refresh the catalogue so future lookups benefit from the discovery.
+            self._catalog.refresh()
             return relative_candidate
 
         target_name = candidate.name
         for root, _, files in os.walk(self.cache_dir):
             if target_name in files:
-                return Path(root) / target_name
+                resolved = Path(root) / target_name
+                self._catalog.refresh()
+                return resolved
         return None
 
     def _read_file_text(self, path: Path) -> str:
