@@ -93,13 +93,14 @@ def openai_api_call(
         "Long Text": "qwen-long",
         "Idx": "qwen-turbo",
         "Reasoning": "qwen-plus-2025-04-28",
+        "Discrete": "qwen-plus-2025-04-28",
     }
 
     model = model_map.get(normalized_mode, "qwen-turbo")
     messages_list = list(messages)
 
     extra_body = {}
-    if normalized_mode == "Reasoning":
+    if normalized_mode in {"Reasoning", "Discrete"}:
         extra_body["enable_thinking"] = True
 
     def factory() -> Iterator:
