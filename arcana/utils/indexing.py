@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Iterable, List
 
 import pandas as pd
@@ -103,13 +104,21 @@ def indexing(cache_dir: str):
     Returns:
         int: The total number of entries indexed.
     """
+    cache_dir = os.path.abspath(cache_dir)
+
     dbms = FiberDBMS()
     # Load existing database if present to avoid duplicates
     existing_entries = set()
     if os.path.exists(INDEX_FILE):
         try:
             dbms.load_from_file(INDEX_FILE)
-            existing_entries = {(e['name'], e['content']) for e in dbms.database}
+            existing_entries = set()
+            for entry in dbms.database:
+                name = entry.get('name', '')
+                content = entry.get('content', '')
+                existing_entries.add((name, content))
+                # Allow duplicate detection against legacy records that stored only the basename.
+                existing_entries.add((Path(name).name, content))
             print(f"Loaded existing index with {len(existing_entries)} entries. New indexing will skip duplicates.")
         except Exception as exc:
             print(f"Could not load existing index for duplicate checking: {exc}")
@@ -156,14 +165,23 @@ def indexing(cache_dir: str):
 
                 # Add the file content to the database
                 if content:  # Ensure content is not None
+                    relative_path = os.path.relpath(file_path, cache_dir)
+                    normalised_path = Path(relative_path).as_posix()
                     for i in content.split('\n'):
                         i = i.strip()
-                        if i and (file, i) not in existing_entries:
-                            lang = detect_language(i)
-                            keywords = extract_keywords(i, lang)
-                            entries.append([file, i, ','.join(keywords)])
-                            existing_entries.add((file, i))  # avoid duplicates within same run
-                #print('The database has been indexed')
+                        if not i:
+                            continue
+                        duplicate_keys = {
+                            (normalised_path, i),
+                            (Path(normalised_path).name, i),
+                        }
+                        if any(key in existing_entries for key in duplicate_keys):
+                            continue
+                        lang = detect_language(i)
+                        keywords = extract_keywords(i, lang)
+                        entries.append([normalised_path, i, ','.join(keywords)])
+                        for key in duplicate_keys:
+                            existing_entries.add(key)
                 print(f"Processed {file}: {len(entries)} entries indexed.")
             except Exception as e:
                 print(f"Failed to process {file}: {e}")
