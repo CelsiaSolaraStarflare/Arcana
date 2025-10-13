@@ -500,7 +500,7 @@ def parse_markdown_inline(text):
         (r'\*\*(.*?)\*\*', 'bold'),      # **bold**
         (r'(?<!\*)\*([^*]+?)\*(?!\*)', 'italic'),  # *italic* (not part of **)
         (r'`(.*?)`', 'code'),            # `code`
-        (r'_\_(.*?)__', 'underline'),    # __underline__
+        (r'(?<!_)__(?!_)(.+?)(?<!_)__(?!_)', 'underline'),    # __underline__ without matching triples
         (r'(?<!_)_([^_]+?)_(?!_)', 'italic'),      # _italic_ (not part of __)
         (r'\[(.*?)\]\((.*?)\)', 'link'), # [text](url)
     ]

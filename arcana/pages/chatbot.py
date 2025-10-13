@@ -16,7 +16,7 @@ import datetime
 import re
 from datetime import date
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 from docx import Document
 from pptx import Presentation
 import chardet
@@ -506,6 +506,61 @@ def query_dbms_with_keywords(dbms: FiberDBMS, keywords: List[str], max_results: 
                 break
 
     return aggregated_results[:max_results], search_attempts
+
+
+def inspect_database_for_keywords(
+    dbms: FiberDBMS,
+    keywords: List[str],
+    max_commands: int = 8,
+) -> Tuple[List[Dict[str, object]], List[str]]:
+    """Inspect the database for files whose names match the provided keywords.
+
+    This helper is used by the discrete agent mode to build an explicit audit
+    trail of the internal lookups performed prior to generating a reply.
+    """
+
+    if not keywords:
+        return [], []
+
+    try:
+        entries = getattr(dbms, "database", [])
+    except AttributeError:
+        return [], []
+
+    if not isinstance(entries, list) or not entries:
+        return [], []
+
+    cache_root = Path(CACHE_DIR)
+    normalized_keywords = _unique_preserve_order(
+        [keyword.strip() for keyword in keywords if keyword and keyword.strip()]
+    )
+
+    audit_log: List[Dict[str, object]] = []
+    matched_files: List[str] = []
+
+    for keyword in normalized_keywords[:max_commands]:
+        command = f'SCAN name CONTAINS "{keyword}"'
+        keyword_lower = keyword.lower()
+        command_matches: List[Dict[str, object]] = []
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            if keyword_lower in name.lower():
+                cache_path = cache_root / name
+                match_info = {
+                    "file": name,
+                    "exists": cache_path.exists(),
+                }
+                command_matches.append(match_info)
+                matched_files.append(name)
+
+        audit_log.append({"command": command, "matches": command_matches})
+
+    return audit_log, _unique_preserve_order(matched_files)
 
 # NLTK data is now handled centrally in Arcanalte.py
 
@@ -1105,12 +1160,13 @@ def chatbot_page():
             st.markdown("**Assistant Mode**")
             response_type = st.selectbox(
                 "Mode",
-                ["Normal", "IDX", "Math", "Reasoning"],
+                ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
                 help="""
                 **Normal**: General conversation with search context
                 **IDX**: Strictly based on indexed files
                 **Math**: Specialized for mathematical queries
                 **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+                **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
                 """,
                 label_visibility="collapsed",
             )
@@ -1197,7 +1253,7 @@ def chatbot_page():
                 keyword_source = "nltk"
                 keyword_generation_raw = ""
                 keywords = []
-                if response_type == "Normal":
+                if response_type in {"Normal", "Discrete"}:
                     gpt_keywords, keyword_generation_raw = generate_keywords_with_gpt(user_input, lang)
                     if gpt_keywords:
                         keywords = gpt_keywords
@@ -1208,6 +1264,8 @@ def chatbot_page():
 
                 results = []
                 search_attempts = []
+                discrete_scan_logs: List[Dict[str, object]] = []
+                discrete_matched_files: List[str] = []
                 if keywords:
                     if keyword_source == "language_model":
                         results, search_attempts = query_dbms_with_keywords(dbms, keywords)
@@ -1220,6 +1278,22 @@ def chatbot_page():
                         raw_results = raw_results or []
                         results = raw_results[:5]
                         search_attempts = [(query_text, len(results))]
+
+                    if response_type == "Discrete":
+                        discrete_scan_logs, discrete_matched_files = inspect_database_for_keywords(dbms, keywords)
+                        if discrete_scan_logs:
+                            with st.expander("Discrete mode database audit", expanded=False):
+                                for record in discrete_scan_logs:
+                                    st.markdown(f"**{record['command']}**")
+                                    matches = record.get("matches", [])
+                                    if matches:
+                                        for match in matches:
+                                            file_name = match.get("file", "?")
+                                            exists = match.get("exists", False)
+                                            status = "✅" if exists else "⚠️"
+                                            st.markdown(f"- {status} `{file_name}`")
+                                    else:
+                                        st.markdown("- No matching files")
 
                 news_sensitive_query = False
                 if web_supplement_enabled:
@@ -1252,6 +1326,35 @@ def chatbot_page():
                         "Raw keyword suggestion response: " + keyword_generation_raw
                     )
 
+                if response_type == "Discrete":
+                    if discrete_scan_logs:
+                        assistant_reply_lines.append(
+                            "Discrete mode audit log (internal database commands executed before answering):"
+                        )
+                        for record in discrete_scan_logs:
+                            command_text = record.get("command", "scan")
+                            matches = record.get("matches", [])
+                            if matches:
+                                formatted_matches = ", ".join(
+                                    f"{item.get('file', '?')}"
+                                    + (" ✅" if item.get("exists") else " ⚠️ missing")
+                                    for item in matches
+                                )
+                                assistant_reply_lines.append(
+                                    f"- {command_text} → {formatted_matches}"
+                                )
+                            else:
+                                assistant_reply_lines.append(
+                                    f"- {command_text} → no matching files"
+                                )
+                    else:
+                        assistant_reply_lines.append(
+                            "Discrete mode is active but no database scan could be performed due to missing keywords."
+                        )
+                    assistant_reply_lines.append(
+                        "After reviewing the snippets and audit log, think through the reasoning quietly before composing the final reply."
+                    )
+
                 if agent_mode_enabled:
                     target_files = _unique_preserve_order(
                         result.get("name") for result in results if result.get("name")
@@ -1261,7 +1364,10 @@ def chatbot_page():
                         for file_name in st.session_state.get("agent_manual_selection", [])
                         if file_name
                     ]
-                    candidate_files = _unique_preserve_order(list(target_files) + manual_agent_files)
+                    candidate_sources = list(target_files) + manual_agent_files
+                    if response_type == "Discrete" and discrete_matched_files:
+                        candidate_sources.extend(discrete_matched_files)
+                    candidate_files = _unique_preserve_order(candidate_sources)
 
                     if candidate_files:
                         agent_progress_container = st.container()
@@ -1463,6 +1569,18 @@ def chatbot_page():
                             "understand the concept deeply."
                         )
                     })
+                elif response_type == "Discrete":
+                    messages_to_send.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are in discrete retrieval mode. Use the system context to understand which documents were"
+                                " inspected. Plan your reasoning silently before replying, ensure every claim is supported by"
+                                " the retrieved snippets or agent summaries, and be explicit when information is missing."
+                                " Always end with a 'Sources:' line."
+                            ),
+                        }
+                    )
 
                 with st.chat_message("assistant"):
                     # Use st.write_stream to render the response in real-time

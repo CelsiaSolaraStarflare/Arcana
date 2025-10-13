@@ -121,6 +121,7 @@ def openai_api_call(
         "Long Text": "qwen-long",
         "Idx": "qwen-turbo",
         "Reasoning": "qwen-plus-2025-04-28",
+        "Discrete": "qwen-plus-2025-04-28",
     }
 
     messages_list = list(messages)
