@@ -469,6 +469,77 @@ def inspect_database_for_keywords(
 
     return audit_log, _unique_preserve_order(matched_files)
 
+
+def run_discrete_toolkit(
+    dbms: FiberDBMS,
+    keywords: List[str],
+    base_results: List[dict],
+    max_content_queries: int = 6,
+    max_content_results: int = 3,
+    max_summaries: int = 3,
+) -> Dict[str, object]:
+    """Execute structured search and summarisation helpers for discrete mode."""
+
+    audit_log, matched_by_name = inspect_database_for_keywords(dbms, keywords)
+
+    normalized_keywords = _unique_preserve_order(keywords)
+    content_logs: List[Dict[str, object]] = []
+    extra_results: List[dict] = []
+
+    seen_entries = {
+        (result.get("name"), result.get("content"))
+        for result in base_results
+        if isinstance(result, dict)
+    }
+
+    matched_files = list(matched_by_name)
+
+    for keyword in normalized_keywords[:max_content_queries]:
+        hits = dbms.query(keyword, top_n=max_content_results) or []
+        hit_names = [hit.get("name") for hit in hits if hit.get("name")]
+        if hit_names:
+            matched_files.extend(hit_names)
+        content_logs.append({"keyword": keyword, "hits": hit_names})
+        for hit in hits:
+            identifier = (hit.get("name"), hit.get("content"))
+            if identifier in seen_entries:
+                continue
+            seen_entries.add(identifier)
+            extra_results.append(hit)
+
+    summary_results: List[AgentSummaryResult] = []
+    summary_logs: List[Dict[str, object]] = []
+
+    summary_candidates = _unique_preserve_order(matched_files)[:max_summaries]
+    if summary_candidates:
+        agent = get_document_agent()
+        for file_name in summary_candidates:
+            summary = agent.summarise_document(file_name, dbms)
+            if summary.summary_text:
+                summary_results.append(summary)
+                if summary.summary_name:
+                    matched_files.append(summary.summary_name)
+            status = "failed"
+            if summary.summary_text:
+                status = "created" if summary.created else "cached"
+            summary_logs.append(
+                {
+                    "file": file_name,
+                    "status": status,
+                    "reason": summary.reason,
+                    "summary_path": summary.citation_path,
+                }
+            )
+
+    return {
+        "audit_log": audit_log,
+        "content_logs": content_logs,
+        "summary_logs": summary_logs,
+        "summary_results": summary_results,
+        "matched_files": _unique_preserve_order(matched_files),
+        "extra_results": extra_results,
+    }
+
 # NLTK data is now handled centrally in Arcanalte.py
 
 # Chat History Management Functions
@@ -993,7 +1064,7 @@ def chatbot_page():
     with st.container():
         st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
         st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
-        toolbar_cols = st.columns([1.5, 1.5, 1], gap="medium")
+        toolbar_cols = st.columns([1.5, 1.5], gap="medium")
         with toolbar_cols[0]:
             st.markdown("**Web Search**")
             web_supplement_enabled = st.checkbox(
@@ -1019,43 +1090,7 @@ def chatbot_page():
                 """,
                 label_visibility="collapsed",
             )
-        with toolbar_cols[2]:
-            st.markdown("**Agent Mode**")
-            agent_mode_enabled = st.checkbox(
-                "Agent Mode",
-                help=(
-                    "When enabled, Arcana's agent reads full documents, generates summaries, "
-                    "and stores them for future chats before answering."
-                ),
-                key="agent_mode_enabled",
-                label_visibility="collapsed",
-            )
         st.markdown("</div>", unsafe_allow_html=True)
-
-    if "agent_manual_selection" not in st.session_state:
-        st.session_state["agent_manual_selection"] = []
-
-    if agent_mode_enabled:
-        agent_for_selection = get_document_agent()
-        available_agent_docs = agent_for_selection.list_available_documents()
-        with st.expander("Agent document selection", expanded=False):
-            st.caption(
-                "Select additional documents for the agent to read before it crafts a reply. "
-                "These files will be summarised alongside search results."
-            )
-            if available_agent_docs:
-                st.multiselect(
-                    "Additional documents for agent summaries",
-                    options=available_agent_docs,
-                    default=st.session_state.get("agent_manual_selection", []),
-                    key="agent_manual_selection",
-                    help=(
-                        "Choose any indexed document. The agent will process the selected files "
-                        "in full and store refreshed summaries for future conversations."
-                    ),
-                )
-            else:
-                st.info("No indexed documents were found in the cache directory yet.")
 
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
@@ -1092,7 +1127,8 @@ def chatbot_page():
                 results = []
                 search_attempts = []
                 discrete_scan_logs: List[Dict[str, object]] = []
-                discrete_matched_files: List[str] = []
+                discrete_content_logs: List[Dict[str, object]] = []
+                discrete_summary_logs: List[Dict[str, object]] = []
                 if keywords:
                     if keyword_source == "language_model":
                         results, search_attempts = query_dbms_with_keywords(dbms, keywords)
@@ -1107,20 +1143,64 @@ def chatbot_page():
                         search_attempts = [(query_text, len(results))]
 
                     if response_type == "Discrete":
-                        discrete_scan_logs, discrete_matched_files = inspect_database_for_keywords(dbms, keywords)
-                        if discrete_scan_logs:
-                            with st.expander("Discrete mode database audit", expanded=False):
-                                for record in discrete_scan_logs:
-                                    st.markdown(f"**{record['command']}**")
-                                    matches = record.get("matches", [])
-                                    if matches:
-                                        for match in matches:
-                                            file_name = match.get("file", "?")
-                                            exists = match.get("exists", False)
-                                            status = "✅" if exists else "⚠️"
-                                            st.markdown(f"- {status} `{file_name}`")
-                                    else:
-                                        st.markdown("- No matching files")
+                        toolkit_output = run_discrete_toolkit(dbms, keywords, results)
+                        discrete_scan_logs = toolkit_output.get("audit_log", [])
+                        discrete_content_logs = toolkit_output.get("content_logs", [])
+                        discrete_summary_logs = toolkit_output.get("summary_logs", [])
+                        # Matched files are implicitly covered by the audit and summary logs.
+                        agent_summary_results.extend(toolkit_output.get("summary_results", []))
+
+                        extra_results = toolkit_output.get("extra_results", [])
+                        if extra_results:
+                            deduped_results: List[dict] = []
+                            seen_pairs = set()
+                            for item in list(results) + list(extra_results):
+                                if not isinstance(item, dict):
+                                    continue
+                                identifier = (item.get("name"), item.get("content"))
+                                if identifier in seen_pairs:
+                                    continue
+                                seen_pairs.add(identifier)
+                                deduped_results.append(item)
+                            results = deduped_results
+
+                        if any([discrete_scan_logs, discrete_content_logs, discrete_summary_logs]):
+                            with st.expander("Discrete mode tool audit", expanded=False):
+                                if discrete_scan_logs:
+                                    st.markdown("### File name scans")
+                                    for record in discrete_scan_logs:
+                                        st.markdown(f"**{record['command']}**")
+                                        matches = record.get("matches", [])
+                                        if matches:
+                                            for match in matches:
+                                                file_name = match.get("file", "?")
+                                                exists = match.get("exists", False)
+                                                status = "✅" if exists else "⚠️"
+                                                st.markdown(f"- {status} `{file_name}`")
+                                        else:
+                                            st.markdown("- No matching files")
+                                if discrete_content_logs:
+                                    st.markdown("### Content searches")
+                                    for log_entry in discrete_content_logs:
+                                        hits = log_entry.get("hits", [])
+                                        keyword = log_entry.get("keyword", "?")
+                                        if hits:
+                                            st.markdown(f"- `{keyword}` → {', '.join(f'`{name}`' for name in hits)}")
+                                        else:
+                                            st.markdown(f"- `{keyword}` → no content matches")
+                                if discrete_summary_logs:
+                                    st.markdown("### Document summaries")
+                                    for summary_log in discrete_summary_logs:
+                                        file_name = summary_log.get("file", "?")
+                                        status = summary_log.get("status", "failed")
+                                        summary_path = summary_log.get("summary_path")
+                                        reason = summary_log.get("reason")
+                                        details = f"status={status}"
+                                        if summary_path:
+                                            details += f", stored at `{summary_path}`"
+                                        if reason and status == "failed":
+                                            details += f" (reason: {reason})"
+                                        st.markdown(f"- `{file_name}` → {details}")
 
                 news_sensitive_query = False
                 if web_supplement_enabled:
@@ -1154,10 +1234,10 @@ def chatbot_page():
                     )
 
                 if response_type == "Discrete":
+                    assistant_reply_lines.append(
+                        "Discrete toolkit operations executed before composing the reply:"
+                    )
                     if discrete_scan_logs:
-                        assistant_reply_lines.append(
-                            "Discrete mode audit log (internal database commands executed before answering):"
-                        )
                         for record in discrete_scan_logs:
                             command_text = record.get("command", "scan")
                             matches = record.get("matches", [])
@@ -1174,90 +1254,50 @@ def chatbot_page():
                                 assistant_reply_lines.append(
                                     f"- {command_text} → no matching files"
                                 )
-                    else:
-                        assistant_reply_lines.append(
-                            "Discrete mode is active but no database scan could be performed due to missing keywords."
-                        )
-                    assistant_reply_lines.append(
-                        "After reviewing the snippets and audit log, think through the reasoning quietly before composing the final reply."
-                    )
-
-                if agent_mode_enabled:
-                    target_files = _unique_preserve_order(
-                        result.get("name") for result in results if result.get("name")
-                    )
-                    manual_agent_files = [
-                        file_name
-                        for file_name in st.session_state.get("agent_manual_selection", [])
-                        if file_name
-                    ]
-                    candidate_sources = list(target_files) + manual_agent_files
-                    if response_type == "Discrete" and discrete_matched_files:
-                        candidate_sources.extend(discrete_matched_files)
-                    candidate_files = _unique_preserve_order(candidate_sources)
-
-                    if candidate_files:
-                        agent_progress_container = st.container()
-                        progress_placeholder = agent_progress_container.empty()
-                        progress_bar = agent_progress_container.progress(0.0)
-                        status_rows: List[dict] = []
-                        any_success = False
-                        agent = get_document_agent()
-                        total_candidates = len(candidate_files)
-
-                        with st.spinner("🧠 Agent is summarizing documents..."):
-                            for idx, file_name in enumerate(candidate_files, start=1):
-                                progress_placeholder.info(
-                                    f"Agent processing `{file_name}` ({idx}/{total_candidates})"
+                    if discrete_content_logs:
+                        for log_entry in discrete_content_logs:
+                            keyword = log_entry.get("keyword", "?")
+                            hits = log_entry.get("hits", [])
+                            if hits:
+                                formatted_hits = ", ".join(f"`{name}`" for name in hits)
+                                assistant_reply_lines.append(
+                                    f"- SEARCH content for `{keyword}` → {formatted_hits}"
                                 )
-                                summary_result = agent.summarise_document(file_name, dbms)
-                                if summary_result.summary_text:
-                                    agent_summary_results.append(summary_result)
-                                    any_success = True
-                                    status_rows.append(
-                                        {
-                                            "Document": file_name,
-                                            "Result": (
-                                                "Created new summary"
-                                                if summary_result.created
-                                                else "Reused cached summary"
-                                            ),
-                                            "Summary path": summary_result.citation_path or "—",
-                                        }
+                            else:
+                                assistant_reply_lines.append(
+                                    f"- SEARCH content for `{keyword}` → no matches"
+                                )
+                    if discrete_summary_logs:
+                        for summary_log in discrete_summary_logs:
+                            file_name = summary_log.get("file", "?")
+                            status = summary_log.get("status", "failed")
+                            if status in {"created", "cached"}:
+                                destination = summary_log.get("summary_path")
+                                if destination:
+                                    assistant_reply_lines.append(
+                                        f"- SUMMARISE `{file_name}` → {status} summary stored at `{destination}`"
                                     )
                                 else:
-                                    reason = summary_result.reason or "Unknown error"
-                                    st.warning(
-                                        f"Agent could not summarise {file_name}: {reason}"
+                                    assistant_reply_lines.append(
+                                        f"- SUMMARISE `{file_name}` → {status} summary"
                                     )
-                                    status_rows.append(
-                                        {
-                                            "Document": file_name,
-                                            "Result": f"Failed: {reason}",
-                                            "Summary path": "—",
-                                        }
+                            else:
+                                reason = summary_log.get("reason")
+                                if reason:
+                                    assistant_reply_lines.append(
+                                        f"- SUMMARISE `{file_name}` → failed ({reason})"
                                     )
-                                progress_bar.progress(idx / total_candidates)
-
-                        progress_bar.progress(1.0)
-                        if any_success:
-                            progress_placeholder.success(
-                                "Agent finished summarising the selected documents."
-                            )
-                        else:
-                            progress_placeholder.warning(
-                                "Agent processed the requested documents but no summaries were generated."
-                            )
-
-                        if status_rows:
-                            status_df = pd.DataFrame(status_rows)
-                            status_df.index = status_df.index + 1
-                            agent_progress_container.dataframe(
-                                status_df,
-                                use_container_width=True,
-                            )
-                    elif keywords or manual_agent_files:
-                        st.info("Agent mode enabled, but no documents were retrieved to summarise.")
+                                else:
+                                    assistant_reply_lines.append(
+                                        f"- SUMMARISE `{file_name}` → failed"
+                                    )
+                    if not any([discrete_scan_logs, discrete_content_logs, discrete_summary_logs]):
+                        assistant_reply_lines.append(
+                            "- No discrete toolkit operations were executed because no reliable keywords were detected."
+                        )
+                    assistant_reply_lines.append(
+                        "After reviewing the snippets and tool log, think through the reasoning quietly before composing the final reply."
+                    )
 
                 if web_supplement_enabled:
                     assistant_reply_lines.append(
@@ -1280,18 +1320,13 @@ def chatbot_page():
                             "Bing web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
                         )
 
-                if agent_mode_enabled:
-                    if agent_summary_results:
+                if agent_summary_results:
+                    assistant_reply_lines.append(
+                        "Arcana's document summarizer analysed the following files prior to drafting the reply. Cite the original document names when you reference these summaries."
+                    )
+                    for summary in agent_summary_results:
                         assistant_reply_lines.append(
-                            "Agent analysed the full documents listed below. Use their summaries in the following context and cite the original file names."
-                        )
-                        for summary in agent_summary_results:
-                            assistant_reply_lines.append(
-                                f"- `{summary.file_name}` (summary stored as `{summary.summary_name}`)"
-                            )
-                    else:
-                        assistant_reply_lines.append(
-                            "Agent mode is enabled, but no summaries were available for this query."
+                            f"- `{summary.file_name}` (summary stored as `{summary.summary_name}`)"
                         )
 
                 assistant_reply = "\n".join(assistant_reply_lines) + "\n\n"
@@ -1335,51 +1370,6 @@ def chatbot_page():
 
                 st.session_state.pending_sources_default = _build_sources_default_line(combined_results, bing_results)
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
-        else:
-            if agent_mode_enabled and st.session_state.get('processed_file_name'):
-                processed_name = st.session_state['processed_file_name']
-                agent_progress_container = st.container()
-                progress_placeholder = agent_progress_container.empty()
-                progress_bar = agent_progress_container.progress(0.0)
-                with st.spinner("🧠 Agent is summarizing the uploaded file..."):
-                    agent = get_document_agent()
-                    progress_placeholder.info(
-                        f"Agent processing `{processed_name}` (1/1)"
-                    )
-                    summary_result = agent.summarise_document(processed_name, dbms)
-                progress_bar.progress(1.0)
-                if summary_result.summary_text:
-                    progress_placeholder.success(
-                        "Agent finished summarising the uploaded document."
-                    )
-                    agent_summary_results.append(summary_result)
-                    if summary_result.created:
-                        st.success(f"Agent summary saved for {processed_name}.")
-                elif summary_result.reason:
-                    progress_placeholder.warning(
-                        "Agent processed the uploaded document but could not create a summary."
-                    )
-                    st.warning(f"Agent could not summarise {processed_name}: {summary_result.reason}")
-
-            if agent_summary_results:
-                summary_context_lines = [
-                    "AGENT SUMMARY CONTEXT (uploaded file):",
-                    "The agent analysed the active uploaded file and produced the summary below. Use it while answering and cite the document's full relative path.",
-                ]
-                for summary in agent_summary_results:
-                    summary_context_lines.append(f"### Agent summary for `{summary.file_name}`\n{summary.summary_text}")
-                st.session_state.messages.append({"role": "system", "content": "\n\n".join(summary_context_lines)})
-
-                combined_results = [
-                    {
-                        "name": summary.summary_name or f"{summary.file_name} (agent summary)",
-                        "content": summary.summary_text,
-                        "citation_path": summary.citation_path,
-                    }
-                    for summary in agent_summary_results
-                ]
-                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, [])
-
         with st.spinner("Arcana is thinking..."):
             try:
                 # Make sure to initialize 'processed_file_name' if it doesn't exist
