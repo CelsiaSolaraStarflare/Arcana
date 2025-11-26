@@ -118,10 +118,12 @@ Arcana Chatbot, Indexademics. March 31st, 2025. Powered by StandardCAS™.
 FiberDB, StandardCAS™. Chengjui Osmond Fan, Juilyn Celsia. April 3, 2025.
 
 For the Development Team:
-Osmond G11 - Base algorithm coding, DBMS designing, API functions, and Accessories.
-Celsia G11 - UI Coding and Swap Platform conditioning.
-Brian G10 - Debugging and mirroring platform. 
-Pete G10 - Database arrangement and testing.
+Osmond [CLASS OF 26', Initiator] - (Management until Jan 2026) Base algorithm coding, DBMS designing, API functions, and Accessories.
+Celsia [CLASS OF 26'] - UI Coding and Swap Platform conditioning.
+Brian [CLASS OF 27'] - Debugging and mirroring platform. 
+Pete [CLASS OF 27'] - Database arrangement and testing.
+Julie [CLASS OF 28'] - (Management starts Jan 2026) Debugging and plannng
+Ziqian [CLASS OF 28'] - (Management starts Jan 2026) Work planning and communication
 
 For the Utilized Technologies:
 Qwen, Alibaba Cloud Group.
@@ -157,4 +159,5 @@ Copyright © StandardCAS™ 2019–
 **Made with ❤️ by the Arcana Team**
 
 *Transform your documents into intelligent conversations with Arcana Extreme!*
+
 
