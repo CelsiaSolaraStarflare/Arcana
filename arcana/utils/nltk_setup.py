@@ -4,6 +4,7 @@ This module ensures that required NLTK data is downloaded and available.
 Import this module before using NLTK functions to guarantee data availability.
 """
 
+import os
 import nltk
 import ssl
 from functools import lru_cache
@@ -12,6 +13,26 @@ from urllib.error import URLError
 
 from nltk.corpus import stopwords as nltk_stopwords
 from nltk.tokenize import word_tokenize as nltk_word_tokenize
+
+
+DEFAULT_NLTK_DATA_DIR = "/tmp/nltk_data"
+
+
+def _ensure_nltk_data_dir():
+    """Ensure a writable NLTK data directory is configured."""
+    data_dir = os.environ.get("NLTK_DATA", DEFAULT_NLTK_DATA_DIR)
+    os.environ["NLTK_DATA"] = data_dir
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+    except OSError:
+        # Fall back to the default path if the env path is not writable.
+        if data_dir != DEFAULT_NLTK_DATA_DIR:
+            data_dir = DEFAULT_NLTK_DATA_DIR
+            os.environ["NLTK_DATA"] = data_dir
+            os.makedirs(data_dir, exist_ok=True)
+    if data_dir not in nltk.data.path:
+        nltk.data.path.insert(0, data_dir)
+    return data_dir
 
 
 def _patch_ssl_context():
@@ -42,6 +63,9 @@ def ensure_nltk_data():
     Returns:
         bool: True if all data is available
     """
+    # Ensure we have a writable data dir (Streamlit Cloud uses /tmp)
+    data_dir = _ensure_nltk_data_dir()
+
     # Handle SSL certificate issues for NLTK downloads
     original_ssl_context = _patch_ssl_context()
     
@@ -57,7 +81,7 @@ def ensure_nltk_data():
         except (LookupError, OSError):
             print(f"Downloading NLTK package: {package_name}")
             try:
-                if not nltk.download(package_name, quiet=True):
+                if not nltk.download(package_name, download_dir=data_dir, quiet=True):
                     print(
                         f"Warning: Download returned False for {package_name}. "
                         "The package might be unavailable."

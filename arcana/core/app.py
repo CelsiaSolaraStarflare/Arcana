@@ -4,6 +4,7 @@ import uuid
 import socket
 import nltk
 import os
+from arcana.utils.nltk_setup import ensure_nltk_data
 
 from arcana.pages.finder import files_page
 from arcana.pages.chatbot import chatbot_page
@@ -27,21 +28,9 @@ def initialize_app():
         layout="wide"
     )
 
-    # 2. Download NLTK data if not present (basic version without caching)
-    def download_nltk_data():
-        try:
-            nltk.data.find('tokenizers/punkt')
-        except LookupError:
-            nltk.download("punkt")
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            nltk.download("stopwords")
-        return True
-
-    # Only download if not already done in session
+    # 2. Download NLTK data if not present (uses a writable data dir)
     if 'nltk_data_downloaded' not in st.session_state:
-        download_nltk_data()
+        ensure_nltk_data()
         st.session_state.nltk_data_downloaded = True
 
     # 3. Ensure necessary directories exist
