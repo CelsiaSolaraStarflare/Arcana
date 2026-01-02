@@ -21,6 +21,11 @@ from openai.types.chat import ChatCompletionMessageParam
 from arcana.utils.response import openai_api_call
 from arcana.core.config import INDEX_FILE
 
+try:
+    import wordninja
+except ImportError:  # pragma: no cover - optional dependency
+    wordninja = None
+
 # NLTK data is now downloaded once in Arcanalte.py at startup.
 
 def extract_keywords(text, lang: str = 'en', minimum_nltk_keywords: int = 3) -> List[str]:
@@ -93,6 +98,47 @@ def detect_language(text):
         return 'zh'
     return 'en'
 
+
+def _normalize_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"(?<=\w)-\s*\n(?=\w)", "", text)
+    text = text.replace("\n", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+
+    def _split_long_token(match: re.Match[str]) -> str:
+        token = match.group(0)
+        if wordninja is not None:
+            split_tokens = wordninja.split(token)
+            if len(split_tokens) > 1:
+                return " ".join(split_tokens)
+        return re.sub(r"(?<=\d)(?=[A-Za-z])|(?<=[A-Za-z])(?=\d)", " ", token)
+
+    text = re.sub(r"[A-Za-z0-9]{30,}", _split_long_token, text)
+    return text
+
+
+def _split_for_indexing(text: str, max_chars: int = 500, max_words: int = 90) -> List[str]:
+    if not text:
+        return []
+    chunks: List[str] = []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if len(sentence) <= max_chars:
+            chunks.append(sentence)
+            continue
+        words = sentence.split()
+        if len(words) > 1:
+            for i in range(0, len(words), max_words):
+                chunks.append(" ".join(words[i:i + max_words]))
+        else:
+            for i in range(0, len(sentence), max_chars):
+                chunks.append(sentence[i:i + max_chars])
+    return chunks
+
+
 def indexing(cache_dir: str):
     """
     Traverses a directory, processes all supported files, extracts content and
@@ -159,7 +205,7 @@ def indexing(cache_dir: str):
                     content = df.to_csv(index=False)
                 elif file_extension == ".pdf":
                     reader = PdfReader(file_path)
-                    content = "\n".join([page.extract_text() or '' for page in reader.pages])
+                    content = "\n\n".join([page.extract_text() or '' for page in reader.pages])
                 else:
                     content = None  # Ignore unsupported formats
 
@@ -167,10 +213,9 @@ def indexing(cache_dir: str):
                 if content:  # Ensure content is not None
                     relative_path = os.path.relpath(file_path, cache_dir)
                     normalised_path = Path(relative_path).as_posix()
-                    for i in content.split('\n'):
-                        i = i.strip()
-                        if not i:
-                            continue
+                    normalized_content = _normalize_text(content)
+                    chunks = _split_for_indexing(normalized_content)
+                    for i in chunks:
                         duplicate_keys = {
                             (normalised_path, i),
                             (Path(normalised_path).name, i),

@@ -22,6 +22,9 @@ from arcana.pages.textual_refiner import textual_refiner_page
 # Import configurations
 from arcana.core.config import APP_TITLE, CACHE_DIR, INDEX_FILE
 from arcana.utils.fiber import FiberDBMS
+from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
+
+DBMS_ALGORITHM = os.environ.get("ARCANA_DBMS_ALGO", "fiber").strip().lower()
 
 # --- Application Setup ---
 
@@ -60,7 +63,15 @@ def initialize_app():
 
     # 4. Initialize or load the database into session state
     if 'dbms' not in st.session_state:
-        dbms = FiberDBMS()
+        if DBMS_ALGORITHM in {"kai-instant", "instant"}:
+            dbms = KaiInstantDBMS()
+            st.session_state.dbms_mode = "kai-instant"
+        elif DBMS_ALGORITHM in {"kai-think", "think", "kai"}:
+            dbms = KaiThinkDBMS()
+            st.session_state.dbms_mode = "kai-think"
+        else:
+            dbms = FiberDBMS()
+            st.session_state.dbms_mode = "fiber"
         if os.path.exists(INDEX_FILE):
             print(f"Loading existing database from {INDEX_FILE}...")
             dbms.load_from_file(INDEX_FILE)

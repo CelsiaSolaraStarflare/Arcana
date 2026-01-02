@@ -2,6 +2,12 @@
 
 All notable changes for this development session are recorded here.
 
+## [Unreleased] - 2026-01-01
+
+### Added
+- Kai DBMS: hybrid search pipeline with Kai-Instant (fast) and Kai-Think (reranked) modes, optional semantic embeddings, and adaptive fusion.
+- Settings: DBMS mode selector (Fiber/Kai) and a test query panel for comparing search behavior.
+
 ## [Unreleased] - 2025-06-26
 
 ### Added

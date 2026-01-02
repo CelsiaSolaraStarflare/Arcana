@@ -22,25 +22,20 @@ from pptx import Presentation
 import chardet
 from PyPDF2 import PdfReader
 import pandas as pd
-import requests
-import xml.etree.ElementTree as ET
-from html import unescape
 from arcana.utils.indexing import extract_keywords, detect_language
 from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
 
 
 BASE_SYSTEM_PROMPT = (
     "You are a helpful AI assistant named Arcana. You will be provided with search results "
-    "from a user's documents and, when enabled, web supplements. Prioritize the provided "
-    "document snippets for answers and cite the source document's full relative path using "
-    "MLA-style citations, for example: “Guide.” subject/guide.pdf. PDF file. If the provided "
-    "text does not contain the answer but the question involves widely known general "
-    "knowledge, answer accurately using your own knowledge. When web supplement results are "
-    "provided, you may incorporate them but still cite the full URL using MLA conventions "
-    "with an access date. Always conclude your reply with a line that begins with `Sources:` "
-    "followed by a comma-separated list of the sources you used. If you had to rely solely on "
-    "general knowledge and no citations are available, end with `Sources: No sources cited.` "
-    "Be friendly, cute, and helpful."
+    "from a user's documents. Prioritize the provided document snippets for answers and cite "
+    "the source document's full relative path using MLA-style citations, for example: “Guide.” "
+    "subject/guide.pdf. PDF file. If the provided text does not contain the answer but the "
+    "question involves widely known general knowledge, answer accurately using your own "
+    "knowledge. Always conclude your reply with a line that begins with `Sources:` followed "
+    "by a comma-separated list of the sources you used. If you had to rely solely on general "
+    "knowledge and no citations are available, end with `Sources: No sources cited.` Be "
+    "friendly, cute, and helpful."
 )
 
 
@@ -71,18 +66,6 @@ def _parse_keyword_response(response_text: str) -> List[str]:
         if candidate:
             parsed.append(candidate)
     return _unique_preserve_order(parsed)
-
-
-def _clean_html_snippet(snippet: str) -> str:
-    """Convert a raw HTML snippet from Bing into a readable plain-text summary."""
-
-    if not snippet:
-        return ""
-
-    text = unescape(snippet)
-    # Remove simple HTML tags that occasionally show up in RSS descriptions
-    text = re.sub(r"<[^>]+>", "", text)
-    return text.strip()
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"}
@@ -172,125 +155,6 @@ def _message_content_to_plain_text(content) -> str:
         return " ".join(fragment for fragment in fragments if fragment).strip()
 
     return str(content)
-
-
-_NEWS_SENSITIVE_KEYWORDS = {
-    "breaking",
-    "headline",
-    "news",
-    "latest",
-    "update",
-    "updates",
-    "today",
-    "yesterday",
-    "report",
-    "reports",
-    "reported",
-    "reporting",
-    "controversy",
-    "conflict",
-    "war",
-    "ceasefire",
-    "election",
-    "elections",
-    "politic",
-    "policy",
-    "government",
-    "diplomatic",
-    "sanction",
-    "protest",
-    "scandal",
-    "shooting",
-    "crisis",
-    "emergency",
-    "pandemic",
-    "outbreak",
-    "virus",
-    "earthquake",
-    "flood",
-    "wildfire",
-    "court ruling",
-    "verdict",
-    "indictment",
-    "charged",
-    "arrest",
-    "sports score",
-    "tournament",
-    "transfer window",
-}
-
-
-def _looks_like_news_or_sensitive_query(query: str) -> bool:
-    """Heuristically detect if a query is about current events or boundary-sensitive topics."""
-
-    if not query:
-        return False
-
-    normalized = re.sub(r"\s+", " ", query).strip().lower()
-    if not normalized:
-        return False
-
-    for keyword in _NEWS_SENSITIVE_KEYWORDS:
-        if keyword in normalized:
-            return True
-
-    month_names = [
-        "january",
-        "february",
-        "march",
-        "april",
-        "may",
-        "june",
-        "july",
-        "august",
-        "september",
-        "october",
-        "november",
-        "december",
-    ]
-    if any(month in normalized for month in month_names) and re.search(r"\b20[2-9][0-9]\b", normalized):
-        return True
-
-    # Terms like "this week" or explicit recency requests imply current events
-    recency_patterns = [r"\bthis week\b", r"\bthis month\b", r"\blast week\b", r"\blast month\b", r"\brecent\b"]
-    if any(re.search(pattern, normalized) for pattern in recency_patterns):
-        return True
-
-    return False
-
-
-def search_bing(query: str, max_results: int = 3) -> List[dict]:
-    """Fetch supplemental search results from Bing's RSS feed for the query."""
-
-    if not query:
-        return []
-
-    try:
-        response = requests.get(
-            "https://www.bing.com/search",
-            params={"q": query, "format": "rss"},
-            timeout=10,
-        )
-        response.raise_for_status()
-    except Exception:
-        return []
-
-    try:
-        root = ET.fromstring(response.text)
-    except ET.ParseError:
-        return []
-
-    items: List[dict] = []
-    for item in root.findall(".//item"):
-        title = item.findtext("title") or ""
-        link = item.findtext("link") or ""
-        description = _clean_html_snippet(item.findtext("description") or "")
-        if title and link:
-            items.append({"title": title, "link": link, "snippet": description})
-        if len(items) >= max_results:
-            break
-
-    return items
 
 
 def _build_sources_default_line(doc_results: Iterable[dict], web_results: Iterable[dict]) -> str:
@@ -1215,32 +1079,19 @@ def chatbot_page():
     with st.container():
         st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
         st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
-        toolbar_cols = st.columns([1.5, 1.5], gap="medium")
-        with toolbar_cols[0]:
-            st.markdown("**Web Search**")
-            web_supplement_enabled = st.checkbox(
-                "Web supplement (Bing)",
-                help=(
-                    "When enabled, Arcana fetches public web search results from Bing to"
-                    " supplement your indexed documents."
-                ),
-                key="web_supplement_enabled",
-                label_visibility="collapsed",
-            )
-        with toolbar_cols[1]:
-            st.markdown("**Assistant Mode**")
-            response_type = st.selectbox(
-                "Mode",
-                ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
-                help="""
-                **Normal**: General conversation with search context
-                **IDX**: Strictly based on indexed files
-                **Math**: Specialized for mathematical queries
-                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
-                **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
-                """,
-                label_visibility="collapsed",
-            )
+        st.markdown("**Assistant Mode**")
+        response_type = st.selectbox(
+            "Mode",
+            ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
+            help="""
+            **Normal**: General conversation with search context
+            **IDX**: Strictly based on indexed files
+            **Math**: Specialized for mathematical queries
+            **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+            **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
+            """,
+            label_visibility="collapsed",
+        )
         st.markdown("</div>", unsafe_allow_html=True)
 
     if user_input:
@@ -1278,8 +1129,6 @@ def chatbot_page():
         keywords: List[str] = []
         keyword_generation_raw = ""
         keyword_source = "n/a"
-        bing_results: List[dict] = []
-        news_sensitive_query = False
         agent_summary_results: List[AgentSummaryResult] = []
 
         if st.session_state.get('processed_file_name') is None:
@@ -1375,15 +1224,10 @@ def chatbot_page():
                                             details += f" (reason: {reason})"
                                         st.markdown(f"- `{file_name}` → {details}")
 
-                news_sensitive_query = False
-                if web_supplement_enabled:
-                    bing_results = search_bing(user_input)
-                    news_sensitive_query = _looks_like_news_or_sensitive_query(user_input)
-                
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
                     "Evaluate the following snippets and only cite information that is accurate and relevant.",
-                    "If no snippets answer the query, explain that the indexed files lacked the information and rely on web supplements or well-known general knowledge to respond accurately.",
+                    "If no snippets answer the query, explain that the indexed files lacked the information and rely on well-known general knowledge to respond accurately.",
                     f"Keyword generation method: {keyword_source}",
                 ]
 
@@ -1472,27 +1316,6 @@ def chatbot_page():
                         "After reviewing the snippets and tool log, think through the reasoning quietly before composing the final reply."
                     )
 
-                if web_supplement_enabled:
-                    assistant_reply_lines.append(
-                        "When citing web supplements, follow MLA style with the full URL and an access date."
-                    )
-                    if news_sensitive_query:
-                        assistant_reply_lines.append(
-                            "The user's request appears to involve current events or other boundary-sensitive information. Before writing the visible reply, quietly reason about whether the local document snippets are reliable or outdated. Cross-check key facts against the Bing web results and discard any conflicting or unverifiable claims. Keep this deliberation internal and only present conclusions you can support with citations."
-                        )
-                    if bing_results:
-                        assistant_reply_lines.append(
-                            "Web supplement results from Bing (cite using the provided URLs):"
-                        )
-                        for result in bing_results:
-                            assistant_reply_lines.append(
-                                f"- {result['title']} ({result['link']}): {result['snippet']}"
-                            )
-                    else:
-                        assistant_reply_lines.append(
-                            "Bing web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
-                        )
-
                 if agent_summary_results:
                     assistant_reply_lines.append(
                         "Arcana's document summarizer analysed the following files prior to drafting the reply. Cite the original document names when you reference these summaries."
@@ -1512,8 +1335,7 @@ def chatbot_page():
                 elif keywords:
                     assistant_reply += (
                         "No specific passages were retrieved. Let the user know that the indexed documents did not contain "
-                        "information matching their request, then answer using web supplements if available or accurate "
-                        "general knowledge."
+                        "information matching their request, then answer using accurate general knowledge."
                     )
                 else:
                     assistant_reply += (
@@ -1541,7 +1363,7 @@ def chatbot_page():
                         for summary in agent_summary_results
                     )
 
-                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, bing_results)
+                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, [])
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
         with st.spinner("Arcana is thinking..."):
             try:

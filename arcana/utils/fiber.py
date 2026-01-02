@@ -101,6 +101,7 @@ class FiberDBMS:
 
     def _get_snippet(self, content: str, query_words: List[str], max_length: int = 200) -> str:
         content_tokens = self._tokenize(content)
+        joiner = '' if re.search(r'[\u4e00-\u9fff]', content) else ' '
         best_start = 0
         max_score = 0
         for i in range(max(1, len(content_tokens) - max_length)):
@@ -109,7 +110,7 @@ class FiberDBMS:
             if score > max_score:
                 max_score = score
                 best_start = i
-        snippet = ''.join(content_tokens[best_start:best_start+max_length])
+        snippet = joiner.join(content_tokens[best_start:best_start+max_length])
         return snippet + "..." if len(content) > max_length else snippet
 
     def _update_tags(self, original_tags: str, content: str, query_words: List[str]) -> str:

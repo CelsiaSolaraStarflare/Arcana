@@ -1,4 +1,9 @@
+import os
 import streamlit as st
+
+from arcana.core.config import INDEX_FILE
+from arcana.utils.fiber import FiberDBMS
+from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
 
 
 def apply_theme():
@@ -112,6 +117,8 @@ def apply_theme():
 def settings_page():
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
+    if "dbms_mode" not in st.session_state:
+        st.session_state.dbms_mode = "fiber"
 
     apply_theme()
 
@@ -156,6 +163,66 @@ def settings_page():
         key="textual_refiner_enable_quality_checks",
         help="When enabled, Arcana can run AI-powered grammar and style diagnostics on your draft.",
     )
+
+    st.markdown("---")
+    st.subheader("DBMS Search")
+    st.caption("Choose the search engine and test the same prompt across modes.")
+
+    dbms_options = {
+        "Fiber (legacy)": "fiber",
+        "Kai-Instant (fast)": "kai-instant",
+        "Kai-Think (quality)": "kai-think",
+    }
+    current_label = next(
+        (label for label, value in dbms_options.items() if value == st.session_state.dbms_mode),
+        "Fiber (legacy)",
+    )
+    selected_label = st.selectbox(
+        "Search mode",
+        list(dbms_options.keys()),
+        index=list(dbms_options.keys()).index(current_label),
+        help="Kai-Instant prioritizes speed; Kai-Think uses a larger candidate pool and reranks.",
+    )
+    selected_mode = dbms_options[selected_label]
+
+    if selected_mode != st.session_state.dbms_mode:
+        if selected_mode == "kai-instant":
+            dbms = KaiInstantDBMS()
+        elif selected_mode == "kai-think":
+            dbms = KaiThinkDBMS()
+        else:
+            dbms = FiberDBMS()
+
+        if os.path.exists(INDEX_FILE):
+            dbms.load_from_file(INDEX_FILE)
+        st.session_state.dbms = dbms
+        st.session_state.dbms_mode = selected_mode
+        st.success(f"Switched DBMS to {selected_label}.")
+        rerun = getattr(st, "rerun", None)
+        if callable(rerun):
+            rerun()
+        else:
+            st.experimental_rerun()
+
+    query_text = st.text_input(
+        "Test query",
+        placeholder="Try the same prompt here to compare results",
+        key="dbms_test_query",
+    )
+    top_n = st.slider("Results to show", min_value=1, max_value=10, value=5, key="dbms_test_top_n")
+    if st.button("Run test search", key="dbms_test_run") and query_text:
+        dbms = st.session_state.get("dbms")
+        if dbms is None:
+            st.warning("DBMS is not initialized yet.")
+        else:
+            results = dbms.query(query_text, top_n)
+            if results:
+                for idx, result in enumerate(results, 1):
+                    st.markdown(f"**Result {idx}:** {result['name']}")
+                    st.write(result["content"])
+                    st.caption(f"Tags: {result['tags']}")
+            else:
+                st.info("No results found.")
 
     # --- Update Log ---
     with st.expander("View Update Log"):
