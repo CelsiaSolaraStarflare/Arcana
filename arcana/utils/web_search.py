@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Iterable, List, Optional
 
 import requests
@@ -14,8 +15,6 @@ _DEFAULT_HEADERS = {
     "User-Agent": "Arcana/1.0 (+https://example.com)",
 }
 
-environment = os.environ
-BRAVE_SEARCH_API_KEY = environment.get("BRAVE_SEARCH_API_KEY")
 
 def _normalize_query(query: str) -> str:
     return re.sub(r"\s+", " ", query or "").strip()
@@ -33,6 +32,49 @@ def _dedupe_results(items: Iterable[dict]) -> List[dict]:
     return unique
 
 
+def _load_dotenv(dotenv_path: Path) -> None:
+    if not dotenv_path.exists():
+        return
+
+    try:
+        content = dotenv_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def _get_api_key() -> Optional[str]:
+    token = os.environ.get("BRAVE_SEARCH_API_KEY")
+    if token:
+        return token
+
+    project_root = Path(__file__).resolve().parents[2]
+    _load_dotenv(project_root / ".env")
+    token = os.environ.get("BRAVE_SEARCH_API_KEY")
+    if token:
+        return token
+
+    try:
+        import streamlit as st
+    except Exception:
+        return None
+
+    secrets = getattr(st, "secrets", None)
+    if secrets:
+        return secrets.get("BRAVE_SEARCH_API_KEY")
+
+    return None
+
+
 def search_brave_api(
     query: str,
     max_results: int = 5,
@@ -45,7 +87,7 @@ def search_brave_api(
     if not normalized:
         return []
 
-    token = api_key or BRAVE_SEARCH_API_KEY
+    token = api_key or _get_api_key()
     if not token:
         return []
 
