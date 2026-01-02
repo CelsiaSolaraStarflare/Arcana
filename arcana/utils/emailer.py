@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 from typing import Optional
 
@@ -58,6 +59,43 @@ def send_welcome_email(to_email: str) -> Optional[bool]:
                 "html": html_body,
             },
             timeout=10,
+        )
+        response.raise_for_status()
+        return True
+    except Exception:
+        return False
+
+
+def send_chat_archive_email(to_email: str, html_body: str, pdf_bytes: bytes) -> Optional[bool]:
+    load_dotenv()
+    api_key = os.environ.get("RESEND_API_KEY")
+    if not api_key or not to_email:
+        return None
+
+    sender_email = os.environ.get("RESEND_FROM", "onboarding@standardcas.org")
+    sender_name = os.environ.get("RESEND_FROM_NAME", "Arcana Team")
+    sender = f"{sender_name} <{sender_email}>"
+    subject = "Your Arcana chat archive"
+    attachment = {
+        "filename": "arcana_chat_archive.pdf",
+        "content": base64.b64encode(pdf_bytes).decode("utf-8"),
+    }
+
+    try:
+        response = requests.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": sender,
+                "to": to_email,
+                "subject": subject,
+                "html": html_body,
+                "attachments": [attachment],
+            },
+            timeout=15,
         )
         response.raise_for_status()
         return True

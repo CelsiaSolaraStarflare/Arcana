@@ -13,6 +13,7 @@ streamlit
 dashscope>=1.20.0
 python-dotenv
 cryptography
+fpdf2
 
 # Optional dependencies for enhanced features
 # streamlit-theta  # Uncomment for visual PPT editor in Mixup

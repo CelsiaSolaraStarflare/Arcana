@@ -162,6 +162,49 @@ def _message_content_to_plain_text(content) -> str:
     return str(content)
 
 
+def _is_welcome_message(message: dict) -> bool:
+    if not isinstance(message, dict):
+        return False
+    if message.get("role") != "assistant":
+        return False
+    content = _message_content_to_plain_text(message.get("content"))
+    lowered = content.lower()
+    return "arcana" in lowered and "assistant" in lowered
+
+
+def _get_welcome_message() -> str:
+    cached = st.session_state.get("welcome_message")
+    if cached:
+        return cached
+    options = [
+        "Hi, I'm Arcana. Ask me anything about your indexed files.",
+        "Welcome back. What would you like to explore in your documents today?",
+        "Hello! I can search your indexed files. What should we look for?",
+        "Hey there—Arcana here. Ask a question and I’ll dig into your files.",
+        "Hi! Ready when you are. What do you want to find in your documents?",
+        "Welcome! Drop a question and I’ll pull the most relevant snippets.",
+        "Hi! I’m Arcana, your document assistant. How can I help today?",
+        "Hello! Upload a file or ask about your indexed content.",
+        "Hi! Let’s find what you need. What’s your question?",
+        "Welcome to Arcana. What would you like to learn from your files?",
+        "Hey! Ask a question and I’ll search your document library.",
+        "Hi! I can summarize, cite, and search your files. What’s up?",
+        "Hello! Tell me what you need, and I’ll check your indexed sources.",
+        "Welcome back! What topic should we pull from your documents?",
+        "Hi! I’m ready to help—what are we looking for today?",
+        "Hey there. Ask me about your files and I’ll cite sources.",
+        "Hello! Let’s start with a question about your indexed materials.",
+        "Welcome! I can search your docs or use web supplements if enabled.",
+        "Hi! What do you want to know from your uploaded files?",
+        "Hey! Arcana’s ready—ask a question to begin.",
+    ]
+    import random
+
+    message = random.choice(options)
+    st.session_state["welcome_message"] = message
+    return message
+
+
 def _build_sources_default_line(doc_results: Iterable[dict], web_results: Iterable[dict]) -> str:
     """Build a fallback `Sources:` line based on available document and web snippets."""
 
@@ -624,17 +667,30 @@ def load_chat_history(file_path):
             "content": BASE_SYSTEM_PROMPT,
         })
         
+        history_messages = chat_data.get("messages", [])
+        if history_messages:
+            filtered = []
+            welcome_seen = False
+            for msg in history_messages:
+                if _is_welcome_message(msg):
+                    if welcome_seen:
+                        continue
+                    welcome_seen = True
+                filtered.append(msg)
+            history_messages = filtered
+
         # Add the welcome message only if there are no user messages in history
-        user_messages_in_history = [msg for msg in chat_data.get("messages", []) if msg["role"] == "user"]
-        if not user_messages_in_history:
+        user_messages_in_history = [msg for msg in history_messages if msg.get("role") == "user"]
+        has_welcome_in_history = any(_is_welcome_message(msg) for msg in history_messages)
+        if not user_messages_in_history and not has_welcome_in_history:
             st.session_state.messages.append({
-                "role": "assistant", 
-                "content": "Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about your indexed files!"
+                "role": "assistant",
+                "content": _get_welcome_message(),
             })
         
         # Load the chat history messages
-        if chat_data.get("messages"):
-            st.session_state.messages.extend(chat_data["messages"])
+        if history_messages:
+            st.session_state.messages.extend(history_messages)
         
         # Restore processed file context if it exists
         st.session_state.processed_file_name = chat_data.get('processed_file_name', None)
@@ -1621,7 +1677,7 @@ def chatbot_page():
 def init_messages():
     """Initializes or resets the chat message history in the session state."""
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hey, I'm Arcana, your Indexademics AI assistant. Ask me anything about your indexed files!"},
+        {"role": "assistant", "content": _get_welcome_message()},
         {"role": "system", "content": BASE_SYSTEM_PROMPT},
     ]
     st.session_state.pending_vision_inputs = []

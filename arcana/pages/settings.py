@@ -6,7 +6,8 @@ from arcana.utils.fiber import FiberDBMS
 from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
 from arcana.utils.web_search import search_web
 from arcana.utils.auth import load_app_settings, save_app_settings
-from arcana.utils.emailer import send_welcome_email
+from arcana.utils.emailer import send_chat_archive_email, send_welcome_email
+from arcana.utils.chat_export import build_chat_summary, build_chat_transcript_pdf, load_chats_for_export
 
 
 def _inject_css(css: str) -> None:
@@ -171,6 +172,30 @@ def settings_page():
                 st.error("Email failed to send. Check RESEND_API_KEY and RESEND_FROM.")
             else:
                 st.info("Email not configured. Set RESEND_API_KEY and RESEND_FROM.")
+
+    st.markdown("---")
+    st.subheader("Email Archive")
+    if st.session_state.get("auth_mode") == "user" and st.session_state.get("auth_email"):
+        if st.button("Package chats and email me a PDF"):
+            chats = load_chats_for_export()
+            if not chats:
+                st.info("No chats available to package yet.")
+            else:
+                _, summary_html = build_chat_summary(chats)
+                pdf_bytes = build_chat_transcript_pdf(chats)
+                result = send_chat_archive_email(
+                    st.session_state.get("auth_email", ""),
+                    summary_html,
+                    pdf_bytes,
+                )
+                if result:
+                    st.success("Archive sent to your inbox.")
+                elif result is False:
+                    st.error("Email failed to send. Check RESEND_API_KEY and RESEND_FROM.")
+                else:
+                    st.info("Email not configured. Set RESEND_API_KEY and RESEND_FROM.")
+    else:
+        st.caption("Log in to email your chat archive.")
 
     st.markdown("---")
     st.subheader("Textual Refiner")

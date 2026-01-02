@@ -14,7 +14,7 @@ from arcana.pages.longresponse import longresponse_page
 from arcana.pages.textual_refiner import textual_refiner_page
 from arcana.core.config import APP_TITLE, CACHE_DIR
 from arcana.utils.fiber import FiberDBMS
-from arcana.utils.auth_ui import enforce_login
+from arcana.utils.auth_ui import enforce_login, logout
 from arcana.utils.auth import password_login_enabled
 from arcana.utils import storage
 
@@ -197,6 +197,13 @@ with st.sidebar.expander("Apps", expanded=False):
         key="apps_nav",
         on_change=_set_page_from_apps,
     )
+
+if st.session_state.get("auth_mode") in {"user", "guest"}:
+    st.sidebar.markdown("---")
+    label = "Log out" if st.session_state.get("auth_mode") == "user" else "Exit guest mode"
+    if st.sidebar.button(label):
+        logout()
+        st.rerun()
 
 # Default to Introduction page if no page is selected
 if "selected_page" not in st.session_state:
