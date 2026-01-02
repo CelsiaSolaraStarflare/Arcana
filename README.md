@@ -37,10 +37,13 @@ For users in the CLASS OF '27: The responses you receive will likely be from Pee
 You are currently using **ArcanaLTE (Long Term Evolution)**, the lightweight yet powerful version of the Indexademics platform.
 
 ```
-ArcanaLTE Æ152 (Current)
-✔ Full Indexademics chatbot functionality
-✔ Document-based database searching
-✔ ArcanaMixup for PPT and Doc generation
+ArcanaLTE 211.2 (Current)
+✔ Chat-first workspace with integrated file uploads
+✔ Document indexing + searchable DBMS results
+✔ Brave web + image supplements (optional)
+✔ Discrete / Reasoning / Math modes for responses
+✔ Chat history auto-save and resumable sessions
+✔ Streamlit UI with streamlined navigation
 
 ArcanaExtreme ß111 
 ➕ Contour Design

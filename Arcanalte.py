@@ -170,11 +170,17 @@ with st.sidebar.expander("Apps", expanded=False):
 
 def intro_page():
     """
-    Display the project README as the introduction page and optionally show
-    system information.
+    Display the introduction HTML page and optionally show system information.
     """
-    with open("README.md", "r", encoding="utf-8") as f:
-        st.markdown(f.read())
+    from pathlib import Path
+    import streamlit.components.v1 as components
+
+    intro_path = Path(__file__).resolve().parent / "arcana" / "pages" / "intro.html"
+    try:
+        html = intro_path.read_text(encoding="utf-8")
+    except OSError:
+        html = "<p>Intro page unavailable.</p>"
+    components.html(html, height=2200, scrolling=False)
 
     if st.button("Show System Information", key="show_sys_info"):
         import socket

@@ -75,8 +75,15 @@ def get_ip_address():
 
 # Intro page function
 def intro_page():
-    with open('README.md', 'r', encoding='utf-8') as file:
-        st.markdown(file.read())
+    from pathlib import Path
+    import streamlit.components.v1 as components
+
+    intro_path = Path(__file__).resolve().parents[1] / "pages" / "intro.html"
+    try:
+        html = intro_path.read_text(encoding="utf-8")
+    except OSError:
+        html = "<p>Intro page unavailable.</p>"
+    components.html(html, height=2200, scrolling=False)
     if st.button("Show MAC & IP Address"):
         st.write(f"MAC Address: {get_mac_address()}")
         st.write(f"IP Address: {get_ip_address()}")

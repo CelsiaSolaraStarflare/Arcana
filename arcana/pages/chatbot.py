@@ -573,9 +573,10 @@ def save_chat_history(session_name=None):
     
     # Filter out system messages for cleaner history
     user_messages = [msg for msg in st.session_state.messages if msg["role"] != "system"]
+    user_only_messages = [msg for msg in user_messages if msg.get("role") == "user"]
 
-    # Generate a short tagline based on the conversation
-    tagline = generate_chat_tagline(user_messages)
+    # Generate a short tagline once there's at least one user message
+    tagline = generate_chat_tagline(user_only_messages) if user_only_messages else ""
 
     chat_data = {
         "session_name": session_name,
@@ -643,25 +644,49 @@ def get_available_chat_histories():
         if filename.endswith('.json'):
             file_path = os.path.join(chat_dir, filename)
             try:
-                # Get file modification time for better sorting
                 file_mtime = os.path.getmtime(file_path)
-                
+
                 with open(file_path, 'r', encoding='utf-8') as f:
                     chat_data = json.load(f)
+                timestamp = chat_data.get('timestamp')
+                if not timestamp:
+                    timestamp = datetime.datetime.fromtimestamp(file_mtime).isoformat()
+                    chat_data['timestamp'] = timestamp
+                tagline = chat_data.get('tagline', '')
+                user_count = len([msg for msg in chat_data.get('messages', []) if msg.get('role') == 'user'])
+                if not tagline and user_count > 0:
+                    tagline = generate_chat_tagline(chat_data.get('messages', []))
+                    if tagline:
+                        chat_data['tagline'] = tagline
+                if chat_data.get('timestamp') != timestamp or chat_data.get('tagline') != tagline:
+                    try:
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            json.dump(chat_data, f, indent=2, ensure_ascii=False)
+                    except Exception:
+                        pass
                 histories.append({
                     'filename': filename,
                     'filepath': file_path,
                     'session_name': chat_data.get('session_name', filename[:-5]),
-                    'tagline': chat_data.get('tagline', ''),
-                    'timestamp': chat_data.get('timestamp', 'Unknown'),
+                    'tagline': tagline,
+                    'timestamp': timestamp or 'Unknown',
                     'message_count': len(chat_data.get('messages', [])),
                     'modified_time': file_mtime
                 })
             except:
                 continue
     
-    # Sort by file modification time (most recently modified first)
-    histories.sort(key=lambda x: x['modified_time'], reverse=True)
+    def _parse_timestamp(value: str) -> datetime.datetime:
+        try:
+            return datetime.datetime.fromisoformat(value)
+        except Exception:
+            return datetime.datetime.fromtimestamp(0)
+
+    # Sort by chat timestamp to avoid reordering on metadata writes.
+    histories.sort(
+        key=lambda x: _parse_timestamp(x.get('timestamp') or ''),
+        reverse=True
+    )
     return histories
 
 def generate_chat_tagline(messages):
@@ -674,6 +699,21 @@ def generate_chat_tagline(messages):
         )
         if not content:
             return ""
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You generate a concise chat title in 5 words or fewer. "
+                    "Return only the title with no punctuation at the end."
+                ),
+            },
+            {"role": "user", "content": content[:800]},
+        ]
+        stream = openai_api_call(prompt, "Normal")
+        response_text = "".join(piece for piece in stream).strip()
+        if response_text:
+            words = response_text.split()
+            return " ".join(words[:5])
         lang = detect_language(content)
         keywords = extract_keywords(content, lang)
         return " ".join(keywords[:3])
@@ -933,61 +973,64 @@ def chatbot_page():
         
         st.markdown("---")
         
-        # Chat History Section (collapsible like ChatGPT)
+        # Chat History Section
         histories = get_available_chat_histories()
         if histories:
-            with st.expander("💬 Chat History", expanded=True):
-                # Show recent chats with clean design
-                for i, history in enumerate(histories[:5]):  # Show only 5 most recent
-                    with st.container():
-                        col1, col2 = st.columns([4, 1])
+            st.markdown("### Chats")
+            for i, history in enumerate(histories[:5]):
+                with st.container():
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        display_title = history.get('tagline') or history['session_name']
+                        if st.button(
+                            display_title,
+                            key=f"chat_{i}",
+                            help=f"{history['message_count']} messages • {history['timestamp'][:10]}",
+                            use_container_width=True,
+                        ):
+                            continuous_save_chat()
+                            if load_chat_history(history['filepath']):
+                                st.success("Chat loaded!")
+                                st.rerun()
+                        meta = f"{history['message_count']} messages • {history['timestamp'][:10]}"
+                        if history.get('tagline'):
+                            st.caption(f"{history['session_name']} · {meta}")
+                        else:
+                            st.caption(meta)
+                    with col2:
+                        if st.button("🗑️", key=f"del_{i}", help="Delete chat"):
+                            if delete_chat_history(history['filepath']):
+                                st.success("Deleted!")
+                                st.rerun()
+
+            if len(histories) > 5:
+                with st.expander("All Chats", expanded=False):
+                    for i, history in enumerate(histories[5:], start=5):
+                        col1, col2 = st.columns([5, 1])
                         with col1:
+                            display_title = history.get('tagline') or history['session_name']
                             if st.button(
-                                f"📄 {history['session_name'][:25]}...",
-                                key=f"chat_{i}",
+                                display_title,
+                                key=f"chat_all_{i}",
                                 help=f"{history['message_count']} messages • {history['timestamp'][:10]}",
-                                use_container_width=True
+                                use_container_width=True,
                             ):
-                                # Save current chat before switching
                                 continuous_save_chat()
                                 if load_chat_history(history['filepath']):
                                     st.success("Chat loaded!")
                                     st.rerun()
+                            meta = f"{history['message_count']} messages • {history['timestamp'][:10]}"
                             if history.get('tagline'):
-                                st.caption(history['tagline'])
-                        
+                                st.caption(f"{history['session_name']} · {meta}")
+                            else:
+                                st.caption(meta)
                         with col2:
-                            if st.button("🗑️", key=f"del_{i}", help="Delete chat"):
+                            if st.button("🗑️", key=f"del_all_{i}", help="Delete chat"):
                                 if delete_chat_history(history['filepath']):
                                     st.success("Deleted!")
                                     st.rerun()
-                
-                # Show more button if there are more than 5 chats
-                if len(histories) > 5:
-                    with st.expander("📚 Show All Chats", expanded=False):
-                        for i, history in enumerate(histories[5:], start=5):
-                            col1, col2 = st.columns([4, 1])
-                            with col1:
-                                if st.button(
-                                    f"📄 {history['session_name'][:20]}...",
-                                    key=f"chat_all_{i}",
-                                    help=f"{history['message_count']} messages • {history['timestamp'][:10]}",
-                                    use_container_width=True
-                                ):
-                                    # Save current chat before switching
-                                    continuous_save_chat()
-                                    if load_chat_history(history['filepath']):
-                                        st.success("Chat loaded!")
-                                        st.rerun()
-                                if history.get('tagline'):
-                                    st.caption(history['tagline'])
-                            with col2:
-                                if st.button("🗑️", key=f"del_all_{i}", help="Delete chat"):
-                                    if delete_chat_history(history['filepath']):
-                                        st.success("Deleted!")
-                                        st.rerun()
         else:
-            st.caption("💬 No chat history yet")
+            st.caption("No chat history yet")
         
         # Session Info (compact)
         if "messages" in st.session_state and st.session_state.messages:
