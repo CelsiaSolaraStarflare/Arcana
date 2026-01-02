@@ -9,7 +9,7 @@ from arcana.utils.response import openai_api_call
 # Ensure NLTK data is available before importing NLTK functions
 import arcana.utils.nltk_setup
 from arcana.utils.fiber import FiberDBMS
-from arcana.core.config import INDEX_FILE, CACHE_DIR
+from arcana.core.config import CACHE_DIR
 import os
 import json
 import datetime
@@ -25,6 +25,8 @@ import pandas as pd
 from arcana.utils.indexing import extract_keywords, detect_language
 from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
 from arcana.utils.web_search import search_brave_images, search_web
+from arcana.utils import storage
+from arcana.utils.auth import decrypt_json_from_file, encrypt_json_to_file
 
 
 BASE_SYSTEM_PROMPT = (
@@ -557,9 +559,10 @@ def run_discrete_toolkit(
 
 def get_chat_histories_dir():
     """Get the directory where chat histories are stored."""
-    chat_dir = os.path.join(os.path.dirname(__file__), "chat_histories")
-    os.makedirs(chat_dir, exist_ok=True)
-    return chat_dir
+    root = storage.get_user_data_dir()
+    chat_dir = root / "chat_histories"
+    chat_dir.mkdir(parents=True, exist_ok=True)
+    return str(chat_dir)
 
 def save_chat_history(session_name=None):
     """Save the current chat session to a file."""
@@ -587,11 +590,16 @@ def save_chat_history(session_name=None):
     }
     
     chat_dir = get_chat_histories_dir()
-    file_path = os.path.join(chat_dir, f"{session_name}.json")
-    
+    key = storage.get_auth_key()
+    suffix = ".enc" if key else ".json"
+    file_path = os.path.join(chat_dir, f"{session_name}{suffix}")
+
     try:
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(chat_data, f, indent=2, ensure_ascii=False)
+        if key:
+            encrypt_json_to_file(Path(file_path), chat_data, key)
+        else:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(chat_data, f, indent=2, ensure_ascii=False)
         return file_path
     except Exception as e:
         st.error(f"Failed to save chat history: {e}")
@@ -600,8 +608,12 @@ def save_chat_history(session_name=None):
 def load_chat_history(file_path):
     """Load a chat session from a file."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            chat_data = json.load(f)
+        key = storage.get_auth_key()
+        if key and file_path.endswith(".enc"):
+            chat_data = decrypt_json_from_file(Path(file_path), key)
+        else:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                chat_data = json.load(f)
         
         # Clear current messages completely and load from history
         st.session_state.messages = []
@@ -640,14 +652,22 @@ def get_available_chat_histories():
     chat_dir = get_chat_histories_dir()
     histories = []
     
+    key = storage.get_auth_key()
     for filename in os.listdir(chat_dir):
-        if filename.endswith('.json'):
+        if filename.endswith('.enc') and not key:
+            continue
+        if filename.endswith('.json') and key:
+            continue
+        if filename.endswith('.json') or filename.endswith('.enc'):
             file_path = os.path.join(chat_dir, filename)
             try:
                 file_mtime = os.path.getmtime(file_path)
 
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    chat_data = json.load(f)
+                if filename.endswith(".enc") and key:
+                    chat_data = decrypt_json_from_file(Path(file_path), key)
+                else:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        chat_data = json.load(f)
                 timestamp = chat_data.get('timestamp')
                 if not timestamp:
                     timestamp = datetime.datetime.fromtimestamp(file_mtime).isoformat()
@@ -660,8 +680,11 @@ def get_available_chat_histories():
                         chat_data['tagline'] = tagline
                 if chat_data.get('timestamp') != timestamp or chat_data.get('tagline') != tagline:
                     try:
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            json.dump(chat_data, f, indent=2, ensure_ascii=False)
+                        if filename.endswith(".enc") and key:
+                            encrypt_json_to_file(Path(file_path), chat_data, key)
+                        else:
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                json.dump(chat_data, f, indent=2, ensure_ascii=False)
                     except Exception:
                         pass
                 histories.append({
@@ -945,10 +968,10 @@ def chatbot_page():
     # Initialize or load the database automatically
     if 'dbms' not in st.session_state or not isinstance(st.session_state.dbms, FiberDBMS):
         dbms = FiberDBMS()
-        if os.path.exists(INDEX_FILE):
+        if storage.index_file_exists():
             with st.spinner("Loading existing database..."):
                 try:
-                    dbms.load_from_file(INDEX_FILE)
+                    storage.load_dbms(dbms)
                     st.success("Database loaded successfully!")
                 except Exception as e:
                     st.warning(f"Failed to load existing database: {e}. Starting with empty database.")
@@ -1160,7 +1183,7 @@ def chatbot_page():
                                     lang = detect_language(line)
                                     keywords = extract_keywords(line, lang)
                                     dbms.add_entry(name=uploaded_file.name, content=line, tags=keywords)
-                            dbms.save(INDEX_FILE)
+                            storage.save_dbms(dbms)
 
                         context_message = (
                             f"The user has uploaded the file `{uploaded_file.name}`. "

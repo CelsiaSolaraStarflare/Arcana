@@ -19,7 +19,8 @@ from docx import Document
 from pptx import Presentation
 from PyPDF2 import PdfReader
 
-from arcana.core.config import CACHE_DIR, INDEX_FILE
+from arcana.core.config import CACHE_DIR
+from arcana.utils import storage
 from arcana.utils.document_catalog import DocumentCatalog
 from arcana.utils.fiber import FiberDBMS
 from arcana.utils.indexing import extract_keywords, detect_language
@@ -274,7 +275,7 @@ class DocumentAgent:
         lang = detect_language(result.summary_text)
         keywords = extract_keywords(result.summary_text, lang)
         dbms.add_entry(name=summary_name, content=result.summary_text, tags=keywords)
-        dbms.save(INDEX_FILE)
+        storage.save_dbms(dbms)
 
 
 def get_document_agent() -> DocumentAgent:
@@ -283,4 +284,3 @@ def get_document_agent() -> DocumentAgent:
     if not hasattr(get_document_agent, "_instance"):
         get_document_agent._instance = DocumentAgent()
     return get_document_agent._instance  # type: ignore[attr-defined]
-

@@ -19,7 +19,7 @@ import ast
 from openai.types.chat import ChatCompletionMessageParam
 
 from arcana.utils.response import openai_api_call
-from arcana.core.config import INDEX_FILE
+from arcana.utils import storage
 
 try:
     import wordninja
@@ -155,9 +155,9 @@ def indexing(cache_dir: str):
     dbms = FiberDBMS()
     # Load existing database if present to avoid duplicates
     existing_entries = set()
-    if os.path.exists(INDEX_FILE):
+    if storage.index_file_exists():
         try:
-            dbms.load_from_file(INDEX_FILE)
+            storage.load_dbms(dbms)
             existing_entries = set()
             for entry in dbms.database:
                 name = entry.get('name', '')
@@ -237,8 +237,8 @@ def indexing(cache_dir: str):
         dbms.add_entry(name=name, content=content, tags=tags.split(','))
 
     # Save the database using the dbms's save method to the configured file
-    dbms.save(INDEX_FILE)
-    print(f"Database saved to {INDEX_FILE}")
+    storage.save_dbms(dbms)
+    print(f"Database saved to {storage.get_index_file_path()}")
     return len(entries)
 
 def correct_malformed_row(row):

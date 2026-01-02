@@ -80,6 +80,16 @@ class FiberDBMS:
                 writer.writerow([entry['name'], entry['timestamp'], entry['content'], entry['tags']])
         print(f"Updated database saved to {filename}.")
 
+    def save_to_csv_text(self) -> str:
+        import io
+
+        buffer = io.StringIO()
+        output = csv.writer(buffer)
+        output.writerow(['name', 'timestamp', 'content', 'tags'])
+        for entry in self.database:
+            output.writerow([entry['name'], entry['timestamp'], entry['content'], entry['tags']])
+        return buffer.getvalue()
+
     def _rate_result(self, entry: Dict[str, str], query_words: List[str]) -> float:
         content_tokens = self._tokenize(entry['content'])
         name_tokens = self._tokenize(entry['name'])
@@ -154,6 +164,35 @@ class FiberDBMS:
                     self._index_content(idx, entry['content'])
                 except Exception as e:
                     print(f"[X] Skipped unreadable row {idx}: {row} (error: {type(e).__name__}: {e})")
+
+    def load_from_csv_text(self, csv_text: str) -> None:
+        self.database.clear()
+        self.content_index.clear()
+        import io
+
+        sanitized = csv_text.replace('\x00', '')
+        reader = csv.DictReader(io.StringIO(sanitized))
+        for idx, row in enumerate(reader):
+            try:
+                if not all(k in row and row[k] is not None for k in ['name', 'timestamp', 'content', 'tags']):
+                    continue
+                tags = row['tags']
+                if tags.startswith('[') and tags.endswith(']'):
+                    try:
+                        tags_list = ast.literal_eval(tags)
+                        tags = ','.join(str(t).strip() for t in tags_list)
+                    except (ValueError, SyntaxError):
+                        pass
+                entry = {
+                    "name": row['name'],
+                    "timestamp": row['timestamp'],
+                    "content": row['content'],
+                    "tags": tags
+                }
+                self.database.append(entry)
+                self._index_content(idx, entry['content'])
+            except Exception:
+                continue
 
 
 def main():

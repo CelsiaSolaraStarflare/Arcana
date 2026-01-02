@@ -2,7 +2,8 @@ import os
 import streamlit as st
 import shutil
 from arcana.utils.indexing import indexing
-from arcana.core.config import CACHE_DIR, INDEX_FILE
+from arcana.core.config import CACHE_DIR
+from arcana.utils import storage
 from arcana.utils.fiber import FiberDBMS
 
 def move_file(current_path, item, selected_folder, new_folder_name=""):
@@ -217,11 +218,11 @@ def files_page():
             
             # Use the existing dbms instance from session_state to reload the data
             if 'dbms' in st.session_state and isinstance(st.session_state.dbms, FiberDBMS):
-                st.session_state.dbms.load_from_file(INDEX_FILE)
+                storage.load_dbms(st.session_state.dbms)
             else:
                 # Fallback for safety, though it shouldn't be needed
                 dbms = FiberDBMS()
-                dbms.load_from_file(INDEX_FILE)
+                storage.load_dbms(dbms)
                 st.session_state.dbms = dbms
 
             st.success(f"Indexing complete! 🎉 {entry_count} entries were processed.")

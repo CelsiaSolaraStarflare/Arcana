@@ -1,14 +1,25 @@
 import os
 import streamlit as st
 
-from arcana.core.config import INDEX_FILE
+from arcana.utils import storage
 from arcana.utils.fiber import FiberDBMS
 from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
 from arcana.utils.web_search import search_web
+from arcana.utils.auth import load_app_settings, save_app_settings
+from arcana.utils.emailer import send_welcome_email
+
+
+def _inject_css(css: str) -> None:
+    html = f"<style>{css}</style>"
+    html_fn = getattr(st, "html", None)
+    if callable(html_fn):
+        html_fn(html)
+    else:
+        st.markdown(html, unsafe_allow_html=True)
 
 
 def apply_theme():
-    """Apply the selected theme by injecting custom CSS and toggling attributes."""
+    """Apply the selected theme by injecting custom CSS."""
 
     if "theme" not in st.session_state:
         st.session_state.theme = "Light"
@@ -21,98 +32,88 @@ def apply_theme():
             "refiner_enable_quality_checks", True
         )
 
-    theme_css = """
-    <style>
-    html[data-theme="Light"] .stApp {
-        background: #f5f5f8;
-        color: #1f1f1f;
+    theme = st.session_state.theme
+    base_css = """
+    .stApp {
+        transition: background 0.2s ease, color 0.2s ease;
     }
-    html[data-theme="Light"] [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid rgba(0, 0, 0, 0.08);
-    }
-    html[data-theme="Light"] .stButton>button,
-    html[data-theme="Light"] .stSelectbox>div>div {
-        color: #1f1f1f;
-    }
-
-    html[data-theme="Dark"] .stApp {
-        background-color: #101010;
-        color: #f7f7f7;
-    }
-    html[data-theme="Dark"] [data-testid="stSidebar"] {
-        background-color: #1f1f1f;
-    }
-    html[data-theme="Dark"] .stButton>button {
-        background-color: #2b2b2b;
-        color: #f7f7f7;
-        border: 1px solid #3a3a3a;
-    }
-    html[data-theme="Dark"] .stTextInput>div>div>input,
-    html[data-theme="Dark"] .stTextArea>div>div>textarea,
-    html[data-theme="Dark"] .stSelectbox>div>div>div {
-        background-color: #1f1f1f;
-        color: #f7f7f7;
-        border-color: #3a3a3a;
-    }
-    html[data-theme="Dark"] h1,
-    html[data-theme="Dark"] h2,
-    html[data-theme="Dark"] h3,
-    html[data-theme="Dark"] h4,
-    html[data-theme="Dark"] h5,
-    html[data-theme="Dark"] h6 {
-        color: #ffffff;
-    }
-
-    html[data-theme="Glass"] .stApp {
-        background: linear-gradient(135deg, rgba(20, 24, 35, 0.85), rgba(33, 45, 62, 0.75)),
-                    url('https://images.unsplash.com/photo-1527443224154-dcc76ee9bc02?auto=format&fit=crop&w=1350&q=80') center/cover fixed;
-        color: #f0f4ff;
-    }
-    html[data-theme="Glass"] [data-testid="stSidebar"],
-    html[data-theme="Glass"] .stApp header,
-    html[data-theme="Glass"] .stApp section,
-    html[data-theme="Glass"] .stApp footer {
-        background: rgba(15, 20, 30, 0.35);
-        backdrop-filter: blur(18px);
-    }
-    html[data-theme="Glass"] .stButton>button,
-    html[data-theme="Glass"] .stSelectbox>div>div,
-    html[data-theme="Glass"] .stTextInput>div>div>input,
-    html[data-theme="Glass"] .stTextArea>div>div>textarea {
-        background: rgba(255, 255, 255, 0.12);
-        color: #f6fbff;
-        border: 1px solid rgba(255, 255, 255, 0.35);
-    }
-    html[data-theme="Glass"] .stButton>button svg,
-    html[data-theme="Glass"] .stSidebar .stButton>button svg,
-    html[data-theme="Glass"] .stSidebar [data-testid="stMarkdownContainer"] svg {
-        opacity: 0.65;
-    }
-    html[data-theme="Glass"] h1,
-    html[data-theme="Glass"] h2,
-    html[data-theme="Glass"] h3,
-    html[data-theme="Glass"] h4,
-    html[data-theme="Glass"] h5,
-    html[data-theme="Glass"] h6 {
-        color: #f6fbff;
-        text-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-    }
-    </style>
     """
 
-    st.markdown(theme_css, unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <script>
-        const root = window.parent.document.documentElement;
-        if (root) {{
-            root.setAttribute('data-theme', '{st.session_state.theme}');
-        }}
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
+    if theme == "Dark":
+        theme_css = """
+        .stApp {
+            background-color: #101010;
+            color: #f7f7f7;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #1f1f1f;
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .stButton>button {
+            background-color: #2b2b2b;
+            color: #f7f7f7;
+            border: 1px solid #3a3a3a;
+        }
+        .stTextInput>div>div>input,
+        .stTextArea>div>div>textarea,
+        .stSelectbox>div>div>div {
+            background-color: #1f1f1f;
+            color: #f7f7f7;
+            border-color: #3a3a3a;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #ffffff;
+        }
+        """
+    elif theme == "Glass":
+        theme_css = """
+        .stApp {
+            background: linear-gradient(135deg, rgba(20, 24, 35, 0.85), rgba(33, 45, 62, 0.75)),
+                        url('https://images.unsplash.com/photo-1527443224154-dcc76ee9bc02?auto=format&fit=crop&w=1350&q=80') center/cover fixed;
+            color: #f0f4ff;
+        }
+        [data-testid="stSidebar"],
+        .stApp header,
+        .stApp section,
+        .stApp footer {
+            background: rgba(15, 20, 30, 0.35);
+            backdrop-filter: blur(18px);
+        }
+        .stButton>button,
+        .stSelectbox>div>div,
+        .stTextInput>div>div>input,
+        .stTextArea>div>div>textarea {
+            background: rgba(255, 255, 255, 0.12);
+            color: #f6fbff;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+        }
+        .stButton>button svg,
+        .stSidebar .stButton>button svg,
+        .stSidebar [data-testid="stMarkdownContainer"] svg {
+            opacity: 0.65;
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: #f6fbff;
+            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+        }
+        """
+    else:
+        theme_css = """
+        .stApp {
+            background: #f5f5f8;
+            color: #1f1f1f;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #ffffff;
+            border-right: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        .stButton>button,
+        .stSelectbox>div>div {
+            color: #1f1f1f;
+        }
+        """
+
+    _inject_css(base_css + theme_css)
 
 # Function for the settings page
 def settings_page():
@@ -148,6 +149,28 @@ def settings_page():
         "Glass": "Glassmorphism-inspired mode with translucent panels and glowing typography.",
     }
     st.info(descriptions.get(st.session_state.theme, ""))
+
+    st.markdown("---")
+    st.subheader("Security")
+    app_settings = load_app_settings()
+    login_enabled = st.checkbox(
+        "Require password login",
+        value=bool(app_settings.get("password_login_enabled", False)),
+        help="When enabled, users must log in or use guest mode before accessing the app.",
+    )
+    if login_enabled != app_settings.get("password_login_enabled", False):
+        app_settings["password_login_enabled"] = login_enabled
+        save_app_settings(app_settings)
+        st.success("Login setting saved. Refresh the app to apply.")
+    if st.session_state.get("auth_email"):
+        if st.button("Send demo email to my login address"):
+            result = send_welcome_email(st.session_state.get("auth_email", ""))
+            if result:
+                st.success("Demo email sent.")
+            elif result is False:
+                st.error("Email failed to send. Check RESEND_API_KEY and RESEND_FROM.")
+            else:
+                st.info("Email not configured. Set RESEND_API_KEY and RESEND_FROM.")
 
     st.markdown("---")
     st.subheader("Textual Refiner")
@@ -194,8 +217,8 @@ def settings_page():
         else:
             dbms = FiberDBMS()
 
-        if os.path.exists(INDEX_FILE):
-            dbms.load_from_file(INDEX_FILE)
+        if storage.index_file_exists():
+            storage.load_dbms(dbms)
         st.session_state.dbms = dbms
         st.session_state.dbms_mode = selected_mode
         st.success(f"Switched DBMS to {selected_label}.")

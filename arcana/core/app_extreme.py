@@ -15,9 +15,12 @@ from flashcards import flashcards_page
 from longresponse import longresponse_page
 from editor import editor_page
 from speech_to_text import speech_to_text_page
-from config import APP_TITLE, CACHE_DIR, INDEX_FILE
+from config import APP_TITLE, CACHE_DIR
 from fiber import FiberDBMS
 from theme import apply_theme
+from arcana.utils import storage
+from arcana.utils.auth_ui import enforce_login
+from arcana.utils.auth import password_login_enabled
 
 # --- Application Setup ---
 
@@ -60,18 +63,22 @@ def initialize_app():
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     # 4b. Build initial index if it does not exist yet
-    if not os.path.exists(INDEX_FILE):
+    if not storage.index_file_exists():
         from indexing import indexing as build_index  # local import to avoid circular
         with st.spinner("First-time setup: building document index… this may take a while"):
             build_index(CACHE_DIR)
             st.success("Initial indexing complete!")
 
     # 5. Initialize or load the database into session state
+    if password_login_enabled() and st.session_state.get("auth_mode") not in {"user", "guest"}:
+        return
+
     if 'dbms' not in st.session_state:
         dbms = FiberDBMS()
-        if os.path.exists(INDEX_FILE):
-            print(f"Loading existing database from {INDEX_FILE}...")
-            dbms.load_from_file(INDEX_FILE)
+        if storage.index_file_exists():
+            index_path = storage.get_index_file_path()
+            print(f"Loading existing database from {index_path}...")
+            storage.load_dbms(dbms)
         else:
             print("No existing database found. Initializing a new one.")
         st.session_state.dbms = dbms
@@ -133,6 +140,7 @@ pages = {
 
 # Initialize the application
 initialize_app()
+enforce_login()
 
 # Apply theme. This needs to be defined in settings.py
 apply_theme()

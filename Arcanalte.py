@@ -20,9 +20,12 @@ from arcana.pages.longresponse import longresponse_page
 from arcana.pages.textual_refiner import textual_refiner_page
 
 # Import configurations
-from arcana.core.config import APP_TITLE, CACHE_DIR, INDEX_FILE
+from arcana.core.config import APP_TITLE, CACHE_DIR
 from arcana.utils.fiber import FiberDBMS
 from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
+from arcana.utils.auth_ui import enforce_login, logout
+from arcana.utils.auth import password_login_enabled
+from arcana.utils import storage
 
 DBMS_ALGORITHM = os.environ.get("ARCANA_DBMS_ALGO", "fiber").strip().lower()
 
@@ -62,6 +65,9 @@ def initialize_app():
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     # 4. Initialize or load the database into session state
+    if password_login_enabled() and st.session_state.get("auth_mode") not in {"user", "guest"}:
+        return
+
     if 'dbms' not in st.session_state:
         if DBMS_ALGORITHM in {"kai-instant", "instant"}:
             dbms = KaiInstantDBMS()
@@ -72,9 +78,10 @@ def initialize_app():
         else:
             dbms = FiberDBMS()
             st.session_state.dbms_mode = "fiber"
-        if os.path.exists(INDEX_FILE):
-            print(f"Loading existing database from {INDEX_FILE}...")
-            dbms.load_from_file(INDEX_FILE)
+        if storage.index_file_exists():
+            index_path = storage.get_index_file_path()
+            print(f"Loading existing database from {index_path}...")
+            storage.load_dbms(dbms)
         else:
             print("No existing database found. Initializing a new one.")
         st.session_state.dbms = dbms
@@ -87,6 +94,9 @@ def initialize_app():
 
 # Initialize the application
 initialize_app()
+
+# Enforce login before navigation when enabled
+enforce_login()
 
 # --- Navigation Setup ---
 
@@ -166,6 +176,13 @@ with st.sidebar.expander("Apps", expanded=False):
         on_change=_set_page_from_apps,
     )
 
+if st.session_state.get("auth_mode") in {"user", "guest"}:
+    st.sidebar.markdown("---")
+    label = "Log out" if st.session_state.get("auth_mode") == "user" else "Exit guest mode"
+    if st.sidebar.button(label):
+        logout()
+        st.rerun()
+
 # --- Page Functions ---
 
 def intro_page():
@@ -203,7 +220,7 @@ def intro_page():
         st.write(f"**IP Address:** {get_ip_address()}")
         st.write(f"**MAC Address:** {get_mac_address()}")
         st.write(f"**Session ID:** {str(uuid.uuid4())}")
-        st.write(f"**Database Status:** {'Loaded' if os.path.exists(INDEX_FILE) else 'Empty'}")
+        st.write(f"**Database Status:** {'Loaded' if storage.index_file_exists() else 'Empty'}")
 
 
 def citations_page():

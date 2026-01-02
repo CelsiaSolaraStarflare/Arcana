@@ -12,8 +12,11 @@ from arcana.pages.settings import settings_page
 from arcana.pages.mixup import mixup_page
 from arcana.pages.longresponse import longresponse_page
 from arcana.pages.textual_refiner import textual_refiner_page
-from arcana.core.config import APP_TITLE, CACHE_DIR, INDEX_FILE
+from arcana.core.config import APP_TITLE, CACHE_DIR
 from arcana.utils.fiber import FiberDBMS
+from arcana.utils.auth_ui import enforce_login
+from arcana.utils.auth import password_login_enabled
+from arcana.utils import storage
 
 # --- Application Setup ---
 
@@ -37,11 +40,15 @@ def initialize_app():
     os.makedirs(CACHE_DIR, exist_ok=True)
 
     # 4. Initialize or load the database into session state
+    if password_login_enabled() and st.session_state.get("auth_mode") not in {"user", "guest"}:
+        return
+
     if 'dbms' not in st.session_state:
         dbms = FiberDBMS()
-        if os.path.exists(INDEX_FILE):
-            print(f"Loading existing database from {INDEX_FILE}...")
-            dbms.load_from_file(INDEX_FILE)
+        if storage.index_file_exists():
+            index_path = storage.get_index_file_path()
+            print(f"Loading existing database from {index_path}...")
+            storage.load_dbms(dbms)
         else:
             print("No existing database found. Initializing a new one.")
         st.session_state.dbms = dbms
@@ -108,6 +115,9 @@ pages = {
 
 # Initialize the application
 initialize_app()
+
+# Enforce login before navigation when enabled
+enforce_login()
 
 # Add analytics
 add_google_analytics()

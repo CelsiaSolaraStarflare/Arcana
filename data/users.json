@@ -1,0 +1,12 @@
+{
+  "celsiastarflare_outlook_xom": {
+    "email": "celsiastarflare@outlook.xom",
+    "salt": "TAUcphfHEfruodfvy4XHIw==",
+    "password_hash": "JkKSNrGvW7wrECmRLurUtty0kwEdNTqJhrcwNPwRj14="
+  },
+  "osmond91349_outlook_com": {
+    "email": "osmond91349@outlook.com",
+    "salt": "WRmAquvH9KiEaAJyB7rVWg==",
+    "password_hash": "owkT6VgN35pfBejX/RB6x4iuxy8UDzAwGB44qdWATVU="
+  }
+}

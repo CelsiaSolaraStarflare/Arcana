@@ -20,6 +20,10 @@ GENERATED_FILES_DIR = DATA_DIR / "generated"
 # This file is crucial for the chatbot and search functionalities.
 INDEX_FILE = DATA_DIR / "arcana_index.csv"
 
+# App settings stored outside source control.
+APP_SETTINGS_FILE = DATA_DIR / "app_settings.json"
+DEFAULT_PASSWORD_LOGIN = False
+
 
 # --- Application Settings ---
 # The title of the Streamlit application.

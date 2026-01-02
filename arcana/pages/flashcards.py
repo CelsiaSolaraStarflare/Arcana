@@ -4,7 +4,7 @@ import re
 import datetime
 from arcana.utils.response import openai_api_call
 from arcana.utils.fiber import FiberDBMS
-from arcana.core.config import INDEX_FILE
+from arcana.utils import storage
 from arcana.utils.indexing import extract_keywords, detect_language
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -65,11 +65,9 @@ def flashcards_page():
     else:
         # Try to load from the index file on disk
         try:
-            import os
-            index_file = INDEX_FILE
-            if os.path.exists(index_file):
+            if storage.index_file_exists():
                 dbms = FiberDBMS()
-                dbms.load_from_file(index_file)
+                storage.load_dbms(dbms)
                 st.session_state.dbms = dbms
                 if dbms.is_empty():
                     dbms = None
@@ -687,4 +685,3 @@ Feedback:"""
             
     except Exception as e:
         return f"Error getting feedback: {str(e)}"
-
