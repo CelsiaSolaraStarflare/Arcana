@@ -14,6 +14,9 @@ _DEFAULT_HEADERS = {
     "User-Agent": "Arcana/1.0 (+https://example.com)",
 }
 
+environment = os.environ
+BRAVE_SEARCH_API_KEY = environment.get("BRAVE_SEARCH_API_KEY")
+
 def _normalize_query(query: str) -> str:
     return re.sub(r"\s+", " ", query or "").strip()
 
@@ -42,7 +45,7 @@ def search_brave_api(
     if not normalized:
         return []
 
-    token = api_key or os.environ.get("BRAVE_SEARCH_API_KEY")
+    token = api_key or BRAVE_SEARCH_API_KEY
     if not token:
         return []
 
