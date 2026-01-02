@@ -24,7 +24,7 @@ from PyPDF2 import PdfReader
 import pandas as pd
 from arcana.utils.indexing import extract_keywords, detect_language
 from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
-from arcana.utils.web_search import search_web
+from arcana.utils.web_search import search_brave_images, search_web
 
 
 BASE_SYSTEM_PROMPT = (
@@ -1153,6 +1153,7 @@ def chatbot_page():
         keyword_source = "n/a"
         agent_summary_results: List[AgentSummaryResult] = []
         web_results: List[dict] = []
+        image_results: List[dict] = []
 
         if st.session_state.get('processed_file_name') is None:
             with st.spinner("Searching for relevant information..."):
@@ -1249,6 +1250,21 @@ def chatbot_page():
 
                 if web_supplement_enabled:
                     web_results = search_brave(user_input)
+                    image_results = search_brave_images(user_input)
+
+                if web_supplement_enabled and image_results:
+                    with st.expander("Web image results", expanded=False):
+                        columns = st.columns(3)
+                        for idx, image in enumerate(image_results):
+                            target = columns[idx % len(columns)]
+                            img_url = image.get("thumbnail") or image.get("image") or image.get("link")
+                            caption = image.get("title") or "Image result"
+                            with target:
+                                if img_url:
+                                    st.image(img_url, caption=caption, use_column_width=True)
+                                link = image.get("link")
+                                if link:
+                                    st.caption(link)
 
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
@@ -1358,6 +1374,15 @@ def chatbot_page():
                         assistant_reply_lines.append(
                             "Brave web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
                         )
+                    if image_results:
+                        assistant_reply_lines.append(
+                            "Web image results from Brave (use URLs when citing images):"
+                        )
+                        for result in image_results:
+                            image_url = result.get("image") or result.get("thumbnail") or result.get("link")
+                            assistant_reply_lines.append(
+                                f"- {result.get('title', 'Image result')} ({image_url})"
+                            )
 
                 if agent_summary_results:
                     assistant_reply_lines.append(

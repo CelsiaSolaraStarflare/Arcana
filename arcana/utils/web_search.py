@@ -1,4 +1,4 @@
-"""Lightweight web search helpers using Brave's Search API. uwu"""
+"""Lightweight web search helpers using Brave's Search API."""
 
 from __future__ import annotations
 
@@ -117,6 +117,71 @@ def search_brave_api(
         description = (item.get("description") or "").strip()
         if title and link:
             results.append({"title": title, "link": link, "snippet": description})
+        if len(results) >= max_results:
+            break
+
+    return _dedupe_results(results)
+
+
+def search_brave_images(
+    query: str,
+    max_results: int = 5,
+    timeout: int = 10,
+    api_key: Optional[str] = None,
+) -> List[dict]:
+    """Fetch supplemental image results from Brave's Search API."""
+
+    normalized = _normalize_query(query)
+    if not normalized:
+        return []
+
+    token = api_key or _get_api_key()
+    if not token:
+        return []
+
+    headers = dict(_DEFAULT_HEADERS)
+    headers["X-Subscription-Token"] = token
+
+    try:
+        response = requests.get(
+            "https://api.search.brave.com/res/v1/images/search",
+            params={"q": normalized, "count": max_results},
+            headers=headers,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+    except Exception:
+        return []
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return []
+
+    results: List[dict] = []
+    items = []
+    if isinstance(payload.get("images"), dict):
+        items = payload.get("images", {}).get("results", []) or []
+    elif isinstance(payload.get("results"), list):
+        items = payload.get("results") or []
+
+    for item in items:
+        title = (item.get("title") or "").strip()
+        page_url = (item.get("url") or item.get("page_url") or "").strip()
+        thumb = ""
+        thumbnail = item.get("thumbnail") or {}
+        if isinstance(thumbnail, dict):
+            thumb = (thumbnail.get("src") or thumbnail.get("url") or "").strip()
+        image_url = (item.get("image") or item.get("image_url") or item.get("url") or "").strip()
+        if page_url or image_url:
+            results.append(
+                {
+                    "title": title or "Image result",
+                    "link": page_url or image_url,
+                    "thumbnail": thumb or image_url,
+                    "image": image_url or thumb,
+                }
+            )
         if len(results) >= max_results:
             break
 
