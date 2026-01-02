@@ -271,6 +271,51 @@ def search_brave(query: str, max_results: int = 3) -> List[dict]:
     return search_web(query=query, max_results=max_results)
 
 
+def _looks_like_image_request(query: str) -> bool:
+    """Heuristically detect if the user is asking for images."""
+
+    if not query:
+        return False
+
+    normalized = re.sub(r"\s+", " ", query).strip().lower()
+    if not normalized:
+        return False
+
+    image_keywords = [
+        "image",
+        "images",
+        "photo",
+        "photos",
+        "picture",
+        "pictures",
+        "logo",
+        "logos",
+        "diagram",
+        "diagrams",
+        "chart",
+        "charts",
+        "graph",
+        "graphs",
+        "illustration",
+        "illustrations",
+        "icon",
+        "icons",
+        "screenshot",
+        "screenshots",
+        "wallpaper",
+        "wallpapers",
+        "art",
+        "artwork",
+        "flag",
+        "flags",
+        "map",
+        "maps",
+        "show me",
+    ]
+
+    return any(keyword in normalized for keyword in image_keywords)
+
+
 def _ensure_sources_line(response_text: str, default_line: str) -> str:
     """Guarantee the assistant response ends with a `Sources:` line."""
 
@@ -786,69 +831,73 @@ def chatbot_page():
     st.session_state.setdefault("pending_vision_inputs", [])
     st.session_state.setdefault("vision_last_image_data", None)
 
-    # Add custom CSS for ChatGPT-like styling
+    # Add streamlined ChatGPT-like styling
     st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: "Space Grotesk", sans-serif;
+    }
+
+    .block-container {
+        max-width: 880px;
+        padding-top: 1.25rem;
+        padding-bottom: 3rem;
+    }
+
     .sidebar .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    
+
+    [data-testid="stChatMessage"] {
+        border-radius: 14px;
+        padding: 12px 16px;
+        margin: 10px 0;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: #f8fafc;
+    }
+
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] {
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #0f172a;
+    }
+
+    [data-testid="stChatMessage"][data-testid="stChatMessageUser"] {
+        background: #e9f1ff;
+        border-color: rgba(37, 99, 235, 0.2);
+    }
+
+    [data-testid="stChatInput"] textarea {
+        border-radius: 14px !important;
+        border: 1px solid rgba(15, 23, 42, 0.15) !important;
+        padding: 12px 14px !important;
+        font-size: 1rem !important;
+        background: #ffffff !important;
+    }
+
     .chat-history-item {
         background-color: #f7f7f8;
         border-radius: 8px;
         padding: 8px 12px;
         margin: 4px 0;
-        border: 1px solid #e5e5e7;
+        border: 1px solid #e5e7eb;
     }
-    
+
     .chat-history-item:hover {
-        background-color: #ececf1;
+        background-color: #eef2f7;
     }
-    
+
     .new-chat-btn {
-        background: linear-gradient(90deg, #1f2937 0%, #374151 100%);
+        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
         color: white;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         padding: 12px;
         font-weight: 600;
         margin-bottom: 16px;
-    }
-    
-    /* Reduce sidebar spacing */
-    .css-1d391kg {
-        padding-top: 1rem;
-    }
-    
-    /* Style section headers */
-    .sidebar-section-header {
-        font-size: 14px;
-        font-weight: 600;
-        color: #374151;
-        margin-bottom: 8px;
-    }
-
-    .arcana-toolbar {
-        background-color: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        padding: 12px 16px 6px;
-        margin: 16px 0;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-    }
-
-    .arcana-toolbar .toolbar-title {
-        font-weight: 600;
-        color: #1f2937;
-        font-size: 0.9rem;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
-
-    .arcana-toolbar div[data-testid="stHorizontalBlock"] {
-        margin-bottom: 0.2rem;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -940,35 +989,73 @@ def chatbot_page():
         else:
             st.caption("💬 No chat history yet")
         
-        st.markdown("---")
-        
-        # File Upload Section (prominent and visible)
-        st.markdown("### 📄 Upload Document")
-        st.markdown("Upload a file to chat with it directly:")
-        
-        uploaded_file = st.file_uploader(
-            "Choose a file to analyze",
-            type=['txt', 'pdf', 'docx', 'pptx', 'csv', 'xlsx', 'xls', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'],
-            help="Supported formats: PDF, Word, PowerPoint, Text, Excel, CSV, common image types"
-        )
-        
-        # Show current file context if one is loaded
-        if st.session_state.get('processed_file_name'):
-            st.success(f"📄 Currently chatting with: **{st.session_state.processed_file_name}**")
-            if st.button("❌ Clear File Context", use_container_width=True):
-                st.session_state.processed_file_name = None
-                # Remove file context from messages
-                st.session_state.messages = [msg for msg in st.session_state.messages 
-                                           if not (msg.get("role") == "system" and "uploaded the file" in msg.get("content", ""))]
-                st.rerun()
-        
-        st.markdown("---")
-        
         # Session Info (compact)
         if "messages" in st.session_state and st.session_state.messages:
             meaningful_messages = [msg for msg in st.session_state.messages if msg["role"] in ["user", "assistant"]]
             if len(meaningful_messages) >= 2:
                 st.caption(f"💬 {len(meaningful_messages)} messages • Auto-saves when starting new chat")
+
+    # Remove the old clear button since it's now in sidebar as "New Chat"
+
+    if "messages" not in st.session_state or not st.session_state.messages:
+        init_messages()
+
+    # Display existing conversation (excluding system messages)
+    for message in st.session_state.messages:
+        role = message.get("role")
+        if role != "system":
+            with st.chat_message(role):
+                _render_message_content(message.get("content"))
+
+    with st.container():
+        controls_cols = st.columns([2.2, 1, 1], gap="medium")
+        with controls_cols[0]:
+            uploaded_file = st.file_uploader(
+                "Add a document or image",
+                type=['txt', 'pdf', 'docx', 'pptx', 'csv', 'xlsx', 'xls', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'],
+                help="Supported formats: PDF, Word, PowerPoint, Text, Excel, CSV, common image types",
+                label_visibility="collapsed",
+            )
+        with controls_cols[1]:
+            web_supplement_enabled = st.checkbox(
+                "Web supplement",
+                help=(
+                    "When enabled, Arcana fetches public web search results from Brave to"
+                    " supplement your indexed documents."
+                ),
+                key="web_supplement_enabled",
+            )
+        with controls_cols[2]:
+            response_type = st.selectbox(
+                "Mode",
+                ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
+                help="""
+                **Normal**: General conversation with search context
+                **IDX**: Strictly based on indexed files
+                **Math**: Specialized for mathematical queries
+                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+                **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
+                """,
+                label_visibility="collapsed",
+            )
+
+        if st.session_state.get('processed_file_name'):
+            context_cols = st.columns([3, 1], gap="small")
+            with context_cols[0]:
+                st.info(f"📄 Chatting with: **{st.session_state.processed_file_name}**")
+            with context_cols[1]:
+                if st.button("Clear file context", use_container_width=True):
+                    st.session_state.processed_file_name = None
+                    st.session_state.messages = [
+                        msg
+                        for msg in st.session_state.messages
+                        if not (
+                            msg.get("role") == "system"
+                            and "uploaded the file" in msg.get("content", "")
+                        )
+                    ]
+                    st.rerun()
+
         if uploaded_file is not None:
             file_extension = os.path.splitext(uploaded_file.name)[1].lower()
             if file_extension in IMAGE_EXTENSIONS:
@@ -992,46 +1079,37 @@ def chatbot_page():
                         file_path = os.path.join(uploads_dir, uploaded_file.name)
                         with open(file_path, "wb") as f:
                             f.write(image_bytes)
-                        st.info(f"💾 Saved to {uploads_dir}: {uploaded_file.name}")
+                        st.caption(f"Saved: {uploaded_file.name}")
                     except Exception as e:
                         st.warning(f"Could not save image to {uploads_dir}: {e}")
                     if last_data_url == data_url:
-                        st.info(
-                            "🖼️ Image re-queued for follow-up questions. It will accompany your next message."
-                        )
+                        st.info("🖼️ Image re-queued for the next response.")
                     else:
-                        st.success(
-                            "🖼️ Image queued for analysis. Ask a question and it will be included in the next reply."
-                        )
+                        st.success("🖼️ Image queued for analysis.")
                 else:
                     st.info("🖼️ This image is already queued for the next response.")
             elif st.session_state.get('processed_file_name') != uploaded_file.name:
                 with st.spinner(f"🔍 Processing {uploaded_file.name}..."):
                     file_content = extract_content_from_file(uploaded_file)
                     if file_content:
-                        # Save the uploaded file to CACHE_DIR/Uploads directory
                         uploads_dir = os.path.join(CACHE_DIR, "Uploads")
                         os.makedirs(uploads_dir, exist_ok=True)
 
                         try:
-                            # Save the original file
                             file_path = os.path.join(uploads_dir, uploaded_file.name)
                             with open(file_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
 
-                            # Also save extracted content as txt for easy reference
                             txt_filename = os.path.splitext(uploaded_file.name)[0] + "_extracted.txt"
                             txt_path = os.path.join(uploads_dir, txt_filename)
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(file_content)
 
-                            st.info(f"💾 Saved to {uploads_dir}: {uploaded_file.name} + extracted text")
+                            st.caption(f"Saved: {uploaded_file.name} + extracted text")
                         except Exception as e:
                             st.warning(f"Could not save file to {uploads_dir}: {e}")
-                            # Continue with processing even if file saving fails
 
-                        # Index the new file content into the database
-                        with st.spinner(f"📚 Indexing content..."):
+                        with st.spinner("📚 Indexing content..."):
                             lines = file_content.split('\n')
                             for line in lines:
                                 line = line.strip()
@@ -1039,9 +1117,8 @@ def chatbot_page():
                                     lang = detect_language(line)
                                     keywords = extract_keywords(line, lang)
                                     dbms.add_entry(name=uploaded_file.name, content=line, tags=keywords)
-                            dbms.save(INDEX_FILE) # Save the updated index
+                            dbms.save(INDEX_FILE)
 
-                        # Add the file content as a system message for context, with priority instructions
                         context_message = (
                             f"The user has uploaded the file `{uploaded_file.name}`. "
                             f"For the user's next questions, you MUST prioritize the content of this file as the primary and ONLY source of information. "
@@ -1055,19 +1132,7 @@ def chatbot_page():
                         st.success(f"✅ {uploaded_file.name} indexed and ready for questions!")
                         st.rerun()
                     else:
-                        st.session_state.processed_file_name = None # Reset if processing fails
-
-    # Remove the old clear button since it's now in sidebar as "New Chat"
-
-    if "messages" not in st.session_state or not st.session_state.messages:
-        init_messages()
-
-    # Display existing conversation (excluding system messages)
-    for message in st.session_state.messages:
-        role = message.get("role")
-        if role != "system":
-            with st.chat_message(role):
-                _render_message_content(message.get("content"))
+                        st.session_state.processed_file_name = None
 
     pending_images = st.session_state.get("pending_vision_inputs", [])
     if pending_images:
@@ -1083,38 +1148,6 @@ def chatbot_page():
 
     # User input area
     user_input = st.chat_input("Ask me anything about your documents...")
-
-    # Response toolbar directly beneath the input
-    with st.container():
-        st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
-        st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
-        toolbar_cols = st.columns([1.5, 1.5], gap="medium")
-        with toolbar_cols[0]:
-            st.markdown("**Web Search**")
-            web_supplement_enabled = st.checkbox(
-                "Web supplement (Brave)",
-                help=(
-                    "When enabled, Arcana fetches public web search results from Brave to"
-                    " supplement your indexed documents."
-                ),
-                key="web_supplement_enabled",
-                label_visibility="collapsed",
-            )
-        with toolbar_cols[1]:
-            st.markdown("**Assistant Mode**")
-            response_type = st.selectbox(
-                "Mode",
-                ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
-                help="""
-                **Normal**: General conversation with search context
-                **IDX**: Strictly based on indexed files
-                **Math**: Specialized for mathematical queries
-                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
-                **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
-                """,
-                label_visibility="collapsed",
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
 
     if user_input:
         st.session_state.pending_sources_default = "Sources: No sources cited."
@@ -1250,21 +1283,8 @@ def chatbot_page():
 
                 if web_supplement_enabled:
                     web_results = search_brave(user_input)
-                    image_results = search_brave_images(user_input)
-
-                if web_supplement_enabled and image_results:
-                    with st.expander("Web image results", expanded=False):
-                        columns = st.columns(3)
-                        for idx, image in enumerate(image_results):
-                            target = columns[idx % len(columns)]
-                            img_url = image.get("thumbnail") or image.get("image") or image.get("link")
-                            caption = image.get("title") or "Image result"
-                            with target:
-                                if img_url:
-                                    st.image(img_url, caption=caption, use_column_width=True)
-                                link = image.get("link")
-                                if link:
-                                    st.caption(link)
+                    if _looks_like_image_request(user_input):
+                        image_results = search_brave_images(user_input)
 
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
@@ -1491,9 +1511,38 @@ def chatbot_page():
                         with st.expander("Show Arcana's reasoning", expanded=False):
                             reasoning_text = response_generator.reasoning.replace("\n", "  \n")
                             st.markdown(reasoning_text or "(Reasoning trace was empty.)")
-                
-                # Append the full response to the message history
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+                    if image_results:
+                        columns = st.columns(3)
+                        for idx, image in enumerate(image_results):
+                            target = columns[idx % len(columns)]
+                            img_url = image.get("thumbnail") or image.get("image") or image.get("link")
+                            caption = image.get("title") or "Image result"
+                            with target:
+                                if img_url:
+                                    st.image(img_url, caption=caption, use_column_width=True)
+                                link = image.get("link")
+                                if link:
+                                    st.caption(link)
+
+                # Append the full response (plus image results) to the message history
+                if image_results:
+                    combined_content: List[dict] = [{"type": "text", "text": full_response}]
+                    for image in image_results:
+                        img_url = image.get("thumbnail") or image.get("image") or image.get("link")
+                        if img_url:
+                            combined_content.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": img_url,
+                                        "caption": image.get("title") or "Image result",
+                                    },
+                                }
+                            )
+                    st.session_state.messages.append({"role": "assistant", "content": combined_content})
+                else:
+                    st.session_state.messages.append({"role": "assistant", "content": full_response})
                 
                 # Continuously save the chat in the background
                 continuous_save_chat()

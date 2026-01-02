@@ -1,5 +1,5 @@
 ![MIT License](https://img.shields.io/badge/license-CC.BY.ND.SA-green.svg)
-![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%201.6Beta1-orange)
+![ArcanaLTE Version](https://img.shields.io/badge/version-ArcanaLTE%20211.1%20Beta%201-orange)
 ![Development Status](https://img.shields.io/badge/status-Beta-orange)
 ![Built with Streamlit](https://img.shields.io/badge/built%20with-Streamlit-ff4b4b?logo=streamlit)
 ![Powered by StandardCAS](https://img.shields.io/badge/powered%20by-StandardCAS™-purple)
@@ -8,7 +8,7 @@
 
 # 🌌 Welcome to ArcanaLTE  
 ✨ By the Indexademics Team | Powered by StandardCAS™
-[*Version 1.5 Beta 02 (2025-07-06)*]
+[*Version 211.1 Beta 1 (2026-01-02)*]
 
 --- 
 ## 📚 Table of Contents

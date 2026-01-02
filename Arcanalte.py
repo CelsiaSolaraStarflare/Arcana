@@ -91,30 +91,80 @@ initialize_app()
 # --- Navigation Setup ---
 
 # Sidebar navigation
-st.sidebar.title("Navigation")
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] {
+        background: #f8fafc;
+        border-right: 1px solid rgba(15, 23, 42, 0.08);
+    }
+    [data-testid="stSidebar"] .stRadio > div {
+        gap: 0.35rem;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        padding: 0.35rem 0.25rem;
+        border-radius: 8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-# --- Page Selection Logic ---
-# Define the pages
-main_pages = ["Introduction", "Files", "Citations", "Chatbot"]
-advanced_pages = ["Mixup", "Textual Refiner", "Long Response"]
+st.sidebar.markdown("## Arcana")
+st.sidebar.caption("Navigate")
 
-# Display main page buttons
-for page in main_pages:
-    if st.sidebar.button(page, key=f"main_btn_{page}"):
-        st.session_state.selected_page = page
-        st.rerun()
+primary_pages = ["Introduction", "Chatbot", "Settings"]
+app_pages = ["Files", "Citations", "Textual Refiner", "Mixup", "Long Response"]
+nav_icons = {
+    "Introduction": "🏠",
+    "Chatbot": "💬",
+    "Files": "📁",
+    "Citations": "🧾",
+    "Textual Refiner": "✍️",
+    "Mixup": "🧪",
+    "Long Response": "🧵",
+    "Settings": "⚙️",
+}
 
-# Display advanced tools in an expander
-with st.sidebar.expander("Advanced Tools"):
-    for page in advanced_pages:
-        if st.button(page, key=f"adv_btn_{page}"):
-            st.session_state.selected_page = page
-            st.rerun()
+def _format_nav_page(page: str) -> str:
+    return f"{nav_icons.get(page, '•')} {page}"
 
-# Display settings button separately at the bottom
-if st.sidebar.button("Settings", key="settings_btn"):
-    st.session_state.selected_page = "Settings"
-    st.rerun()
+def _set_page_from_primary() -> None:
+    st.session_state.selected_page = st.session_state.primary_nav
+
+def _set_page_from_apps() -> None:
+    st.session_state.selected_page = st.session_state.apps_nav
+
+primary_index = (
+    primary_pages.index(st.session_state.selected_page)
+    if st.session_state.selected_page in primary_pages
+    else 0
+)
+st.sidebar.radio(
+    "Primary",
+    primary_pages,
+    index=primary_index,
+    format_func=_format_nav_page,
+    label_visibility="collapsed",
+    key="primary_nav",
+    on_change=_set_page_from_primary,
+)
+
+with st.sidebar.expander("Apps", expanded=False):
+    apps_index = (
+        app_pages.index(st.session_state.selected_page)
+        if st.session_state.selected_page in app_pages
+        else 0
+    )
+    st.radio(
+        "Apps",
+        app_pages,
+        index=apps_index,
+        format_func=_format_nav_page,
+        label_visibility="collapsed",
+        key="apps_nav",
+        on_change=_set_page_from_apps,
+    )
 
 # --- Page Functions ---
 
