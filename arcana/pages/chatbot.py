@@ -24,18 +24,21 @@ from PyPDF2 import PdfReader
 import pandas as pd
 from arcana.utils.indexing import extract_keywords, detect_language
 from arcana.utils.document_agent import AgentSummaryResult, get_document_agent
+from arcana.utils.web_search import search_web
 
 
 BASE_SYSTEM_PROMPT = (
     "You are a helpful AI assistant named Arcana. You will be provided with search results "
-    "from a user's documents. Prioritize the provided document snippets for answers and cite "
-    "the source document's full relative path using MLA-style citations, for example: “Guide.” "
-    "subject/guide.pdf. PDF file. If the provided text does not contain the answer but the "
-    "question involves widely known general knowledge, answer accurately using your own "
-    "knowledge. Always conclude your reply with a line that begins with `Sources:` followed "
-    "by a comma-separated list of the sources you used. If you had to rely solely on general "
-    "knowledge and no citations are available, end with `Sources: No sources cited.` Be "
-    "friendly, cute, and helpful."
+    "from a user's documents and, when enabled, web supplements. Prioritize the provided "
+    "document snippets for answers and cite the source document's full relative path using "
+    "MLA-style citations, for example: “Guide.” subject/guide.pdf. PDF file. If the provided "
+    "text does not contain the answer but the question involves widely known general "
+    "knowledge, answer accurately using your own knowledge. When web supplement results are "
+    "provided, you may incorporate them but still cite the full URL using MLA conventions "
+    "with an access date. Always conclude your reply with a line that begins with `Sources:` "
+    "followed by a comma-separated list of the sources you used. If you had to rely solely on "
+    "general knowledge and no citations are available, end with `Sources: No sources cited.` "
+    "Be friendly, cute, and helpful."
 )
 
 
@@ -260,6 +263,12 @@ def _describe_format(raw_name: str, path_hint: Optional[str] = None) -> str:
     }
 
     return format_map.get(suffix, "Document")
+
+
+def search_brave(query: str, max_results: int = 3) -> List[dict]:
+    """Fetch supplemental search results from Brave's Search API for the query."""
+
+    return search_web(query=query, max_results=max_results)
 
 
 def _ensure_sources_line(response_text: str, default_line: str) -> str:
@@ -1079,19 +1088,32 @@ def chatbot_page():
     with st.container():
         st.markdown("<div class=\"arcana-toolbar\">", unsafe_allow_html=True)
         st.markdown("<div class=\"toolbar-title\">Assistant tools</div>", unsafe_allow_html=True)
-        st.markdown("**Assistant Mode**")
-        response_type = st.selectbox(
-            "Mode",
-            ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
-            help="""
-            **Normal**: General conversation with search context
-            **IDX**: Strictly based on indexed files
-            **Math**: Specialized for mathematical queries
-            **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
-            **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
-            """,
-            label_visibility="collapsed",
-        )
+        toolbar_cols = st.columns([1.5, 1.5], gap="medium")
+        with toolbar_cols[0]:
+            st.markdown("**Web Search**")
+            web_supplement_enabled = st.checkbox(
+                "Web supplement (Brave)",
+                help=(
+                    "When enabled, Arcana fetches public web search results from Brave to"
+                    " supplement your indexed documents."
+                ),
+                key="web_supplement_enabled",
+                label_visibility="collapsed",
+            )
+        with toolbar_cols[1]:
+            st.markdown("**Assistant Mode**")
+            response_type = st.selectbox(
+                "Mode",
+                ["Normal", "IDX", "Math", "Reasoning", "Discrete"],
+                help="""
+                **Normal**: General conversation with search context
+                **IDX**: Strictly based on indexed files
+                **Math**: Specialized for mathematical queries
+                **Reasoning**: Uses a deep reasoning model that thinks step-by-step before replying
+                **Discrete**: Runs explicit database scans before responding and verifies sources with careful reasoning
+                """,
+                label_visibility="collapsed",
+            )
         st.markdown("</div>", unsafe_allow_html=True)
 
     if user_input:
@@ -1130,6 +1152,7 @@ def chatbot_page():
         keyword_generation_raw = ""
         keyword_source = "n/a"
         agent_summary_results: List[AgentSummaryResult] = []
+        web_results: List[dict] = []
 
         if st.session_state.get('processed_file_name') is None:
             with st.spinner("Searching for relevant information..."):
@@ -1224,6 +1247,9 @@ def chatbot_page():
                                             details += f" (reason: {reason})"
                                         st.markdown(f"- `{file_name}` → {details}")
 
+                if web_supplement_enabled:
+                    web_results = search_brave(user_input)
+
                 assistant_reply_lines = [
                     "INTERNAL SEARCH CONTEXT (not visible to the user):",
                     "Evaluate the following snippets and only cite information that is accurate and relevant.",
@@ -1316,6 +1342,23 @@ def chatbot_page():
                         "After reviewing the snippets and tool log, think through the reasoning quietly before composing the final reply."
                     )
 
+                if web_supplement_enabled:
+                    assistant_reply_lines.append(
+                        "When citing web supplements, follow MLA style with the full URL and an access date."
+                    )
+                    if web_results:
+                        assistant_reply_lines.append(
+                            "Web supplement results from Brave (cite using the provided URLs):"
+                        )
+                        for result in web_results:
+                            assistant_reply_lines.append(
+                                f"- {result['title']} ({result['link']}): {result['snippet']}"
+                            )
+                    else:
+                        assistant_reply_lines.append(
+                            "Brave web supplement returned no usable results. If you rely on general knowledge, end with 'Sources: No sources cited.'"
+                        )
+
                 if agent_summary_results:
                     assistant_reply_lines.append(
                         "Arcana's document summarizer analysed the following files prior to drafting the reply. Cite the original document names when you reference these summaries."
@@ -1335,7 +1378,8 @@ def chatbot_page():
                 elif keywords:
                     assistant_reply += (
                         "No specific passages were retrieved. Let the user know that the indexed documents did not contain "
-                        "information matching their request, then answer using accurate general knowledge."
+                        "information matching their request, then answer using web supplements if available or accurate "
+                        "general knowledge."
                     )
                 else:
                     assistant_reply += (
@@ -1363,7 +1407,7 @@ def chatbot_page():
                         for summary in agent_summary_results
                     )
 
-                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, [])
+                st.session_state.pending_sources_default = _build_sources_default_line(combined_results, web_results)
                 st.session_state.messages.append({"role": "system", "content": assistant_reply})
         with st.spinner("Arcana is thinking..."):
             try:

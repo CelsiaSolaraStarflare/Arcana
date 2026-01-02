@@ -4,6 +4,7 @@ import streamlit as st
 from arcana.core.config import INDEX_FILE
 from arcana.utils.fiber import FiberDBMS
 from arcana.utils.kai import KaiInstantDBMS, KaiThinkDBMS
+from arcana.utils.web_search import search_web
 
 
 def apply_theme():
@@ -223,6 +224,34 @@ def settings_page():
                     st.caption(f"Tags: {result['tags']}")
             else:
                 st.info("No results found.")
+
+    st.markdown("---")
+    st.subheader("Web Search Demo")
+    st.caption("Preview supplemental web results (Brave Search API) for a test query.")
+
+    web_query = st.text_input(
+        "Web search query",
+        placeholder="Ask something that needs current context",
+        key="web_search_query",
+    )
+    web_results_count = st.slider(
+        "Web results",
+        min_value=1,
+        max_value=8,
+        value=3,
+        key="web_search_count",
+    )
+    if st.button("Run web search", key="web_search_run") and web_query:
+        results = search_web(web_query, max_results=web_results_count)
+        if results:
+            for idx, result in enumerate(results, 1):
+                st.markdown(f"**Result {idx}:** {result.get('title', 'Untitled')}")
+                if result.get("snippet"):
+                    st.write(result["snippet"])
+                if result.get("link"):
+                    st.caption(result["link"])
+        else:
+            st.info("No web results found.")
 
     # --- Update Log ---
     with st.expander("View Update Log"):
