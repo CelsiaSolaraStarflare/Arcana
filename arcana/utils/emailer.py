@@ -4,12 +4,14 @@ import os
 from typing import Optional
 
 import requests
+from dotenv import load_dotenv
 
 
 RESEND_API_URL = "https://api.resend.com/emails"
 
 
 def send_welcome_email(to_email: str) -> Optional[bool]:
+    load_dotenv()
     api_key = os.environ.get("RESEND_API_KEY")
     if not api_key or not to_email:
         return None
