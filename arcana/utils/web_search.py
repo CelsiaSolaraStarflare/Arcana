@@ -1,4 +1,4 @@
-"""Lightweight web search helpers using Brave's Search API."""
+"""Lightweight web search helpers using Brave's Search API. uwu"""
 
 from __future__ import annotations
 
@@ -13,9 +13,6 @@ _DEFAULT_HEADERS = {
     "Accept": "application/json",
     "User-Agent": "Arcana/1.0 (+https://example.com)",
 }
-
-_DEFAULT_API_KEY = "BSAU1UTC37OH1-kTszK9FYoKVi8haW7" #uwu
-
 
 def _normalize_query(query: str) -> str:
     return re.sub(r"\s+", " ", query or "").strip()
@@ -45,7 +42,7 @@ def search_brave_api(
     if not normalized:
         return []
 
-    token = api_key or os.environ.get("BRAVE_SEARCH_API_KEY") or _DEFAULT_API_KEY
+    token = api_key or os.environ.get("BRAVE_SEARCH_API_KEY")
     if not token:
         return []
 
